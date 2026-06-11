@@ -370,11 +370,19 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 - (CGPoint)_restingContentOffsetForScrollOffset:(CGPoint)scrollOffset withVelocity:(CGPoint)velocity {
 	CGPoint offset = %orig;
 	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderViewKey) boolValue]) {
-		CGSize contentSize = [self _scrollViewContentSize];
-		CGFloat maxY = MAX(0, contentSize.height - CGRectGetHeight(self.bounds));
-		offset.y = MIN(MAX(offset.y, 0), maxY);
+		offset.y = 0;
 	}
 	return offset;
+}
+- (CGSize)_scrollViewContentSize {
+	CGSize contentSize = %orig;
+	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderViewKey) boolValue]) {
+		CGFloat height = CGRectGetHeight(self.bounds);
+		if (height > 0) {
+			contentSize.height = MIN(contentSize.height, height);
+		}
+	}
+	return contentSize;
 }
 %end
 
