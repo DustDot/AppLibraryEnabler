@@ -48,21 +48,6 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
-- (UIView *)podFolderView;
-- (UIView *)currentIconListView;
-@end
-@interface SBHLibraryPodCategoryFolderController : SBHLibraryPodFolderController
-@end
-
-@interface SBIconListView : UIView
-@property (nonatomic) BOOL adjustsColumnPositionsForFullScreenWidth;
-@property (nonatomic) BOOL automaticallyAdjustsLayoutMetricsToFit;
-@property (nonatomic) BOOL boundsSizeTracksContentSize;
-@property (nonatomic) UIEdgeInsets additionalLayoutInsets;
-@end
-
-@interface SBHLibraryPodFolderView : UIView
-@property (nonatomic) BOOL centersContentIfPossible;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -163,44 +148,6 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		searchTextFieldHorizontalEdgeInsets.right = 23;
 		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
 	}
-}
-
-static void ALESpreadLibraryPodFolderController(SBHLibraryPodFolderController *folderController) {
-	if (!folderController || !folderController.view) {
-		return;
-	}
-
-	SBHLibraryPodFolderView *podFolderView = nil;
-	if ([folderController respondsToSelector:@selector(podFolderView)]) {
-		podFolderView = (SBHLibraryPodFolderView *)[folderController podFolderView];
-	}
-	if ([podFolderView respondsToSelector:@selector(setCentersContentIfPossible:)]) {
-		podFolderView.centersContentIfPossible = NO;
-		[podFolderView setNeedsLayout];
-	}
-
-	SBIconListView *currentIconListView = nil;
-	if ([folderController respondsToSelector:@selector(currentIconListView)]) {
-		currentIconListView = (SBIconListView *)[folderController currentIconListView];
-	}
-	if (!currentIconListView) {
-		return;
-	}
-
-	if ([currentIconListView respondsToSelector:@selector(setAdjustsColumnPositionsForFullScreenWidth:)]) {
-		currentIconListView.adjustsColumnPositionsForFullScreenWidth = YES;
-	}
-	if ([currentIconListView respondsToSelector:@selector(setAutomaticallyAdjustsLayoutMetricsToFit:)]) {
-		currentIconListView.automaticallyAdjustsLayoutMetricsToFit = YES;
-	}
-	if ([currentIconListView respondsToSelector:@selector(setBoundsSizeTracksContentSize:)]) {
-		currentIconListView.boundsSizeTracksContentSize = NO;
-	}
-	if ([currentIconListView respondsToSelector:@selector(setAdditionalLayoutInsets:)]) {
-		currentIconListView.additionalLayoutInsets = UIEdgeInsetsZero;
-	}
-
-	[currentIconListView setNeedsLayout];
 }
 
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
@@ -341,22 +288,8 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	UIView *containerView = [self containerView];
-	[self.view setFrame:containerView.bounds];
-}
-%end
-
-%hook SBHLibraryPodCategoryFolderController
-- (void)viewDidLoad {
-	%orig;
-	ALESpreadLibraryPodFolderController(self);
-}
-- (void)viewWillAppear:(bool)arg1 {
-	%orig;
-	ALESpreadLibraryPodFolderController(self);
-}
-- (void)viewDidAppear:(bool)arg1 {
-	%orig;
-	ALESpreadLibraryPodFolderController(self);
+	CGRect containerFrame = containerView.frame;
+	[self.view setFrame:containerFrame];
 }
 %end
 
