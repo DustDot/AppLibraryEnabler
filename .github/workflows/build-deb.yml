@@ -35,13 +35,7 @@ jobs:
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             tail -n 80 build.log > build-tail.log
-            message=$(python3 - <<'PY'
-from pathlib import Path
-text = Path("build-tail.log").read_text(errors="replace")
-text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-print(text)
-PY
-)
+            message=$(python3 -c 'from pathlib import Path; text=Path("build-tail.log").read_text(errors="replace"); print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))')
             echo "::error title=Theos build failed::$message"
             {
               echo "### Build failed"
