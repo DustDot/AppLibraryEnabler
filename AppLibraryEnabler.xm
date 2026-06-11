@@ -58,17 +58,17 @@
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
 @end
 
-typedef struct SBHIconGridSize {
+struct SBHIconGridSize {
 	unsigned short columns;
 	unsigned short rows;
-} SBHIconGridSize;
+};
 
 @interface SBFolder : NSObject
-- (SBHIconGridSize)listGridSize;
+- (struct SBHIconGridSize)listGridSize;
 @end
 
 @interface SBHLibraryCategoryFolder : SBFolder
-- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
+- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
 @end
 
 @interface SBHLibraryCategory : NSObject
@@ -77,7 +77,7 @@ typedef struct SBHIconGridSize {
 
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) SBFolder *folder;
-- (SBHIconGridSize)gridSize;
+- (struct SBHIconGridSize)gridSize;
 @end
 
 static char ALEExpandedLibraryCategoryFolderKey;
@@ -217,8 +217,8 @@ static BOOL ALEIsLandscapeScreen(void) {
 	return screenSize.width > screenSize.height;
 }
 
-static SBHIconGridSize ALEExpandedLibraryCategoryGridSize(SBHIconGridSize originalGridSize) {
-	SBHIconGridSize gridSize = originalGridSize;
+static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconGridSize originalGridSize) {
+	struct SBHIconGridSize gridSize = originalGridSize;
 
 	if (ALEIsLandscapeScreen()) {
 		gridSize.columns = MAX(gridSize.columns, 6);
@@ -291,7 +291,7 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %end
 
 %hook SBHLibraryCategoryFolder
-- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier {
+- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier {
 	BOOL buildingExpandedFolder = ALEBuildingExpandedLibraryCategoryFolderDepth > 0;
 	if (buildingExpandedFolder) {
 		listGridSize = ALEExpandedLibraryCategoryGridSize(listGridSize);
@@ -306,8 +306,8 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %end
 
 %hook SBFolder
-- (SBHIconGridSize)listGridSize {
-	SBHIconGridSize gridSize = %orig;
+- (struct SBHIconGridSize)listGridSize {
+	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsExpandedLibraryCategoryFolder(self)) {
 		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
@@ -317,8 +317,8 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %end
 
 %hook SBIconListModel
-- (SBHIconGridSize)gridSize {
-	SBHIconGridSize gridSize = %orig;
+- (struct SBHIconGridSize)gridSize {
+	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
 		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
