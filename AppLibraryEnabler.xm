@@ -341,8 +341,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	UIView *containerView = [self containerView];
-	CGRect containerFrame = containerView.frame;
-	[self.view setFrame:containerFrame];
+	[self.view setFrame:containerView.bounds];
 }
 %end
 
