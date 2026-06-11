@@ -50,6 +50,14 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+@interface SBIconListGridLayoutConfiguration : NSObject
+@property (nonatomic) unsigned long long numberOfLandscapeColumns;
+@property (nonatomic) unsigned long long numberOfPortraitColumns;
+@property (nonatomic) CGSize listSizeForIconSpacingCalculation;
+@property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
+@property (nonatomic) UIEdgeInsets portraitLayoutInsets;
+@end
+
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -142,6 +150,38 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 }
 
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
+	if (!configuration) {
+		return;
+	}
+
+	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	CGFloat width = MAX(screenSize.width, screenSize.height);
+	CGFloat height = MIN(screenSize.width, screenSize.height);
+
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
+		configuration.numberOfLandscapeColumns = 4;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
+		configuration.numberOfPortraitColumns = 3;
+	}
+	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
+		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
+	}
+	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
+		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
+		insets.left = 72;
+		insets.right = 72;
+		configuration.landscapeLayoutInsets = insets;
+	}
+	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
+		UIEdgeInsets insets = configuration.portraitLayoutInsets;
+		insets.left = 48;
+		insets.right = 48;
+		configuration.portraitLayoutInsets = insets;
+	}
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -167,6 +207,13 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		return YES;
 	}
 	return origValue;
+}
+%end
+
+%hook SBHDefaultIconListLayoutProvider
+- (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
+	%orig;
+	ALEConfigureAppLibraryGrid(configuration);
 }
 %end
 
