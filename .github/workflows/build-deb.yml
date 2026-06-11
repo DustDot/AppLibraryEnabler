@@ -30,9 +30,11 @@ jobs:
 
       - name: Build package
         run: |
+          set +e
           set -o pipefail
           make clean package FINALPACKAGE=1 2>&1 | tee build.log
           status=${PIPESTATUS[0]}
+          set -e
           if [ "$status" -ne 0 ]; then
             tail -n 80 build.log > build-tail.log
             message=$(python3 -c 'from pathlib import Path; text=Path("build-tail.log").read_text(errors="replace"); print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))')
