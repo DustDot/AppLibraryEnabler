@@ -59,8 +59,6 @@
 @property (nonatomic) BOOL automaticallyAdjustsLayoutMetricsToFit;
 @property (nonatomic) BOOL boundsSizeTracksContentSize;
 @property (nonatomic) UIEdgeInsets additionalLayoutInsets;
-- (unsigned long long)iconColumnsForCurrentOrientation;
-- (unsigned long long)iconsInRowForSpacingCalculation;
 @end
 
 @interface SBHLibraryPodFolderView : UIView
@@ -132,15 +130,6 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
-static char ALELibraryCategoryListViewKey;
-
-static unsigned long long ALEExpandedLibraryCategoryColumnsForWidth(CGFloat width) {
-	if (width <= 0) {
-		width = MAX([UIScreen mainScreen].bounds.size.width, [UIScreen mainScreen].bounds.size.height);
-	}
-	return width >= 1000 ? 6 : 5;
-}
-
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
 	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
 		return;
@@ -197,8 +186,6 @@ static void ALESpreadLibraryPodFolderController(SBHLibraryPodFolderController *f
 	if (!currentIconListView) {
 		return;
 	}
-
-	objc_setAssociatedObject(currentIconListView, &ALELibraryCategoryListViewKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
 	if ([currentIconListView respondsToSelector:@selector(setAdjustsColumnPositionsForFullScreenWidth:)]) {
 		currentIconListView.adjustsColumnPositionsForFullScreenWidth = YES;
@@ -371,27 +358,6 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	ALESpreadLibraryPodFolderController(self);
-}
-%end
-
-%hook SBIconListView
-- (unsigned long long)iconColumnsForCurrentOrientation {
-	unsigned long long origValue = %orig;
-	if ([objc_getAssociatedObject(self, &ALELibraryCategoryListViewKey) boolValue]) {
-		unsigned long long expandedColumns = ALEExpandedLibraryCategoryColumnsForWidth(ALEFullWidthForView(self));
-		return MAX(origValue, expandedColumns);
-	}
-
-	return origValue;
-}
-- (unsigned long long)iconsInRowForSpacingCalculation {
-	unsigned long long origValue = %orig;
-	if ([objc_getAssociatedObject(self, &ALELibraryCategoryListViewKey) boolValue]) {
-		unsigned long long expandedColumns = ALEExpandedLibraryCategoryColumnsForWidth(ALEFullWidthForView(self));
-		return MAX(origValue, expandedColumns);
-	}
-
-	return origValue;
 }
 %end
 
