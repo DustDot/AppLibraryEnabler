@@ -48,7 +48,6 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
-@property (nonatomic,readonly) UIView * currentIconListView;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -59,10 +58,13 @@
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
 @end
 
-@interface SBHLibraryPodCategoryIcon : NSObject
-- (unsigned long long)gridSizeClass;
-- (unsigned long long)supportedGridSizeClasses;
-- (BOOL)isGridSizeClassAllowed:(unsigned long long)gridSizeClass;
+@interface SBIconListGridLayout : NSObject
+@property (nonatomic, readonly, copy) SBIconListGridLayoutConfiguration *layoutConfiguration;
+- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
+@end
+
+@interface SBHLibraryPodFolderController (AppLibraryEnabler)
++ (id)iconLocation;
 @end
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -122,6 +124,29 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
+static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
+	if (firstObject == secondObject) {
+		return YES;
+	}
+	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
+		return NO;
+	}
+
+	return [firstObject isEqual:secondObject];
+}
+
+static char ALEAppLibraryRootLayoutKey;
+static BOOL ALEConfiguringAppLibraryRootLayout = NO;
+
+static BOOL ALEIsAppLibraryRootIconLocation(id iconLocation) {
+	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
+	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
+		return NO;
+	}
+
+	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
+}
+
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
 	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
 		return;
@@ -157,33 +182,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 }
 
-static void ALELayoutLibraryPodFolderController(SBHLibraryPodFolderController *folderController) {
-	if (!folderController.view) {
-		return;
-	}
-
-	UIView *view = folderController.view;
-	UIView *superview = view.superview;
-	CGRect fullFrame = superview ? superview.bounds : view.frame;
-	if (CGRectGetWidth(fullFrame) <= 0 || CGRectGetHeight(fullFrame) <= 0) {
-		return;
-	}
-
-	view.frame = fullFrame;
-
-	UIView *containerView = folderController.containerView;
-	if (containerView) {
-		containerView.frame = view.bounds;
-	}
-
-	UIView *currentIconListView = folderController.currentIconListView;
-	if (currentIconListView) {
-		currentIconListView.frame = containerView ? containerView.bounds : view.bounds;
-		[currentIconListView setNeedsLayout];
-	}
-}
-
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL categoriesRoot) {
 	if (!configuration) {
 		return;
 	}
@@ -193,10 +192,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat height = MIN(screenSize.width, screenSize.height);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = 4;
+		configuration.numberOfLandscapeColumns = categoriesRoot ? 8 : 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = 3;
+		configuration.numberOfPortraitColumns = categoriesRoot ? 6 : 3;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
@@ -246,24 +245,43 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 %hook SBHDefaultIconListLayoutProvider
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	ALEConfigureAppLibraryGrid(configuration);
+	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringAppLibraryRootLayout);
+}
+- (id)makeLayoutForIconLocation:(id)iconLocation {
+	BOOL previousConfiguringAppLibraryRootLayout = ALEConfiguringAppLibraryRootLayout;
+	ALEConfiguringAppLibraryRootLayout = ALEIsAppLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringAppLibraryRootLayout = previousConfiguringAppLibraryRootLayout;
+
+	if (layout && ALEIsAppLibraryRootIconLocation(iconLocation)) {
+		objc_setAssociatedObject(layout, &ALEAppLibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	}
+	return layout;
+}
+- (id)layoutForIconLocation:(id)iconLocation {
+	BOOL previousConfiguringAppLibraryRootLayout = ALEConfiguringAppLibraryRootLayout;
+	ALEConfiguringAppLibraryRootLayout = ALEIsAppLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringAppLibraryRootLayout = previousConfiguringAppLibraryRootLayout;
+
+	if (layout && ALEIsAppLibraryRootIconLocation(iconLocation)) {
+		objc_setAssociatedObject(layout, &ALEAppLibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	}
+	return layout;
 }
 %end
 
-%hook SBHLibraryPodCategoryIcon
-- (unsigned long long)gridSizeClass {
-	return 0;
-}
-- (unsigned long long)supportedGridSizeClasses {
+%hook SBIconListGridLayout
+- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation {
 	unsigned long long origValue = %orig;
-	return origValue | 1;
-}
-- (BOOL)isGridSizeClassAllowed:(unsigned long long)gridSizeClass {
-	if (gridSizeClass == 0) {
-		return YES;
+	if ([objc_getAssociatedObject(self, &ALEAppLibraryRootLayoutKey) boolValue]) {
+		if (origValue == 8 || origValue == 6) {
+			return origValue;
+		}
+		return origValue >= 4 ? 8 : 6;
 	}
 
-	return %orig;
+	return origValue;
 }
 %end
 
@@ -335,21 +353,11 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 %end
 
 %hook SBHLibraryPodFolderController
-- (void)viewWillAppear:(bool)arg1 {
-	%orig;
-	ALELayoutLibraryPodFolderController(self);
-}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibraryPodFolderController(self);
-}
-- (void)viewWillLayoutSubviews {
-	%orig;
-	ALELayoutLibraryPodFolderController(self);
-}
-- (void)viewDidLayoutSubviews {
-	%orig;
-	ALELayoutLibraryPodFolderController(self);
+	UIView *containerView = [self containerView];
+	CGRect containerFrame = containerView.frame;
+	[self.view setFrame:containerFrame];
 }
 %end
 
