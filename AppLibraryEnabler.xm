@@ -15,6 +15,8 @@
  */
 
 
+#import <objc/runtime.h>
+
 @interface UIView (AppLibraryEnabler)
 - (id)_viewControllerForAncestor;
 @end
@@ -47,6 +49,136 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+static id ALEValueForKey(id object, NSString *key) {
+	if (!object || !key) {
+		return nil;
+	}
+
+	@try {
+		return [object valueForKey:key];
+	} @catch (NSException *exception) {
+		return nil;
+	}
+}
+
+static BOOL ALEObjectIsKindOfClassNamed(id object, NSString *className) {
+	if (!object || !className) {
+		return NO;
+	}
+
+	Class cls = NSClassFromString(className);
+	return cls ? [object isKindOfClass:cls] : [NSStringFromClass([object class]) isEqualToString:className];
+}
+
+static BOOL ALEIsLibraryController(id controller) {
+	if (!controller) {
+		return NO;
+	}
+
+	if (ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryViewController")) {
+		return YES;
+	}
+
+	id avocadoViewController = ALEValueForKey(controller, @"avocadoViewController");
+	if (avocadoViewController && avocadoViewController != controller) {
+		return ALEIsLibraryController(avocadoViewController);
+	}
+
+	return NO;
+}
+
+static CGFloat ALEFullWidthForView(UIView *view) {
+	CGFloat width = 0;
+	width = MAX(width, CGRectGetWidth(view.bounds));
+	width = MAX(width, CGRectGetWidth(view.superview.bounds));
+	width = MAX(width, CGRectGetWidth(view.window.bounds));
+
+	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	width = MAX(width, screenSize.width);
+
+	return width;
+}
+
+static CGRect ALEFullFrameForView(UIView *view) {
+	CGRect frame = view.bounds;
+
+	if (CGRectGetWidth(view.superview.bounds) > CGRectGetWidth(frame)) {
+		frame = view.superview.bounds;
+	}
+
+	if (CGRectGetWidth(view.window.bounds) > CGRectGetWidth(frame)) {
+		frame = view.window.bounds;
+	}
+
+	if (CGRectGetWidth(frame) > 0 && CGRectGetHeight(frame) > 0) {
+		frame.origin = CGPointZero;
+		return frame;
+	}
+
+	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	return CGRectMake(0, 0, screenSize.width, screenSize.height);
+}
+
+static void ALESetViewFrame(UIView *view, CGRect frame) {
+	if (!view) {
+		return;
+	}
+
+	view.frame = frame;
+}
+
+static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
+	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
+	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
+
+	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
+}
+
+static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
+	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
+		return;
+	}
+
+	CGFloat fullWidth = ALEFullWidthForView(overlayController.view);
+	NSLayoutConstraint *contentWidthConstraint = ALEValueForKey(overlayController, @"contentWidthConstraint");
+	if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
+		contentWidthConstraint.constant = fullWidth;
+	}
+
+	CGRect fullFrame = ALEFullFrameForView(overlayController.view);
+	UIViewController *rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
+	UIViewController *contentViewController = ALEValueForKey(overlayController, @"contentViewController");
+
+	ALESetViewFrame(rightSidebarViewController.view, fullFrame);
+	ALESetViewFrame(contentViewController.view, fullFrame);
+
+	UIViewController *avocadoViewController = ALEValueForKey(contentViewController, @"avocadoViewController");
+	ALESetViewFrame(avocadoViewController.view, fullFrame);
+}
+
+static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
+	if (!searchController.view) {
+		return;
+	}
+
+	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
+	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
+	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
+	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
+
+	CGRect fullFrame = searchController.view.bounds;
+	[containerView setFrame:fullFrame];
+	[contentContainerView setFrame:fullFrame];
+	[searchResultsContainerView setFrame:fullFrame];
+
+	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
+		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
+		searchTextFieldHorizontalEdgeInsets.left = 23;
+		searchTextFieldHorizontalEdgeInsets.right = 23;
+		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	}
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -76,36 +208,57 @@
 %end
 
 %hook SBHomeScreenOverlayViewController
+- (CGFloat)contentWidth {
+	if (ALEOverlayShowsAppLibrary(self)) {
+		return ALEFullWidthForView(self.view);
+	}
+
+	return %orig;
+}
+- (CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
+	if (ALEOverlayShowsAppLibrary(self)) {
+		return containerWidth;
+	}
+
+	return %orig;
+}
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
+	ALEUpdateOverlayLayout(self);
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
+}
+- (void)viewDidLayoutSubviews {
+	%orig;
+	ALEUpdateOverlayLayout(self);
+}
+- (void)viewWillLayoutSubviews {
+	%orig;
+	ALEUpdateOverlayLayout(self);
 }
 %end
 
 %hook SBHLibrarySearchController
+- (void)viewDidLoad {
+	%orig;
+	ALELayoutLibrarySearchController(self);
+}
+- (void)viewWillAppear:(bool)arg1 {
+	%orig;
+	ALELayoutLibrarySearchController(self);
+}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
-	UIView *containerView = [self valueForKey:@"_containerView"];
-	UIView *contentContainerView = [self valueForKey:@"_contentContainerView"];
-	UIView *searchResultsContainerView = [self valueForKey:@"_searchResultsContainerView"];
-
-	CGRect selfFrame = self.view.frame;
-	[containerView setFrame:selfFrame];
-	[contentContainerView setFrame:selfFrame];
-	[searchResultsContainerView setFrame:selfFrame];
-
-	UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
-
-	searchTextFieldHorizontalEdgeInsets.left = 23;
-	searchTextFieldHorizontalEdgeInsets.right = 23;
-
-	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	ALELayoutLibrarySearchController(self);
+}
+- (void)viewWillLayoutSubviews {
+	%orig;
+	ALELayoutLibrarySearchController(self);
 }
 - (void)_layoutSearchViews {
 	%orig;
-	MTMaterialView *searchBackdropView = [self valueForKey:@"_searchBackdropView"];
+	ALELayoutLibrarySearchController(self);
+	MTMaterialView *searchBackdropView = ALEValueForKey(self, @"_searchBackdropView");
 
 	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
 	CGFloat height = [[UIScreen mainScreen] bounds].size.height;
