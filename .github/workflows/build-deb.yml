@@ -29,7 +29,9 @@ jobs:
           echo "$HOME/theos/bin" >> "$GITHUB_PATH"
 
       - name: Build package
-        run: make clean package FINALPACKAGE=1
+        run: |
+          set -o pipefail
+          make clean package FINALPACKAGE=1 2>&1 | tee build.log
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -37,3 +39,11 @@ jobs:
           name: AppLibraryEnabler-deb
           path: packages/*.deb
           if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppLibraryEnabler-build-log
+          path: build.log
+          if-no-files-found: ignore
