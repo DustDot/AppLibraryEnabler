@@ -208,11 +208,6 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
-	UIInterfaceOrientation orientation = [UIApplication sharedApplication].statusBarOrientation;
-	if (orientation != UIInterfaceOrientationUnknown) {
-		return UIInterfaceOrientationIsLandscape(orientation);
-	}
-
 	CGSize screenSize = [UIScreen mainScreen].bounds.size;
 	return screenSize.width > screenSize.height;
 }
