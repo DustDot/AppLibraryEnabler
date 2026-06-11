@@ -50,6 +50,14 @@
 @property (nonatomic,readonly) UIView * containerView;
 @property (nonatomic,readonly) UIView * currentIconListView;
 @end
+@interface SBHLibraryPodCategoryFolderController : SBHLibraryPodFolderController
++ (id)iconLocation;
+@end
+@interface SBHLibraryPodFolderView : UIView
+@property (nonatomic) BOOL centersContentIfPossible;
+- (CGSize)_iconListViewSize;
+- (double)_pageWidth;
+@end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
@@ -59,10 +67,8 @@
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
 @end
 
-@interface SBHLibraryPodCategoryIcon : NSObject
-- (unsigned long long)gridSizeClass;
-- (unsigned long long)supportedGridSizeClasses;
-- (BOOL)isGridSizeClassAllowed:(unsigned long long)gridSizeClass;
+@interface SBIconListGridLayout : NSObject
+- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
 @end
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -120,6 +126,29 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
 
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
+}
+
+static char ALELibraryCategoryFolderLayoutKey;
+static BOOL ALEConfiguringLibraryCategoryFolderLayout = NO;
+
+static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
+	if (firstObject == secondObject) {
+		return YES;
+	}
+	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
+		return NO;
+	}
+
+	return [firstObject isEqual:secondObject];
+}
+
+static BOOL ALEIsLibraryCategoryFolderIconLocation(id iconLocation) {
+	Class categoryFolderControllerClass = NSClassFromString(@"SBHLibraryPodCategoryFolderController");
+	if (!categoryFolderControllerClass || ![categoryFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
+		return NO;
+	}
+
+	return ALEObjectsEqual(iconLocation, [categoryFolderControllerClass iconLocation]);
 }
 
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
@@ -183,7 +212,7 @@ static void ALELayoutLibraryPodFolderController(SBHLibraryPodFolderController *f
 	}
 }
 
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL categoryFolder) {
 	if (!configuration) {
 		return;
 	}
@@ -193,10 +222,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat height = MIN(screenSize.width, screenSize.height);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = 4;
+		configuration.numberOfLandscapeColumns = categoryFolder ? 6 : 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = 3;
+		configuration.numberOfPortraitColumns = categoryFolder ? 5 : 3;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
@@ -246,24 +275,43 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 %hook SBHDefaultIconListLayoutProvider
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	ALEConfigureAppLibraryGrid(configuration);
+	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryCategoryFolderLayout);
+}
+- (id)makeLayoutForIconLocation:(id)iconLocation {
+	BOOL previousConfiguringLibraryCategoryFolderLayout = ALEConfiguringLibraryCategoryFolderLayout;
+	ALEConfiguringLibraryCategoryFolderLayout = ALEIsLibraryCategoryFolderIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryCategoryFolderLayout = previousConfiguringLibraryCategoryFolderLayout;
+
+	if (layout && ALEIsLibraryCategoryFolderIconLocation(iconLocation)) {
+		objc_setAssociatedObject(layout, &ALELibraryCategoryFolderLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	}
+	return layout;
+}
+- (id)layoutForIconLocation:(id)iconLocation {
+	BOOL previousConfiguringLibraryCategoryFolderLayout = ALEConfiguringLibraryCategoryFolderLayout;
+	ALEConfiguringLibraryCategoryFolderLayout = ALEIsLibraryCategoryFolderIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryCategoryFolderLayout = previousConfiguringLibraryCategoryFolderLayout;
+
+	if (layout && ALEIsLibraryCategoryFolderIconLocation(iconLocation)) {
+		objc_setAssociatedObject(layout, &ALELibraryCategoryFolderLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	}
+	return layout;
 }
 %end
 
-%hook SBHLibraryPodCategoryIcon
-- (unsigned long long)gridSizeClass {
-	return 0;
-}
-- (unsigned long long)supportedGridSizeClasses {
+%hook SBIconListGridLayout
+- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation {
 	unsigned long long origValue = %orig;
-	return origValue | 1;
-}
-- (BOOL)isGridSizeClassAllowed:(unsigned long long)gridSizeClass {
-	if (gridSizeClass == 0) {
-		return YES;
+	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderLayoutKey) boolValue]) {
+		if (origValue >= 5) {
+			return origValue;
+		}
+		return origValue >= 4 ? 6 : 5;
 	}
 
-	return %orig;
+	return origValue;
 }
 %end
 
@@ -331,6 +379,28 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	);
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
+}
+%end
+
+%hook SBHLibraryPodFolderView
+- (void)setCentersContentIfPossible:(BOOL)centersContentIfPossible {
+	%orig(NO);
+}
+- (BOOL)centersContentIfPossible {
+	return NO;
+}
+- (CGSize)_iconListViewSize {
+	CGSize origSize = %orig;
+	CGFloat fullWidth = ALEFullWidthForView(self);
+	if (fullWidth > 0) {
+		origSize.width = MAX(origSize.width, fullWidth);
+	}
+	return origSize;
+}
+- (double)_pageWidth {
+	double origValue = %orig;
+	CGFloat fullWidth = ALEFullWidthForView(self);
+	return fullWidth > 0 ? MAX(origValue, fullWidth) : origValue;
 }
 %end
 
