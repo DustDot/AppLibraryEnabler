@@ -50,6 +50,23 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+@interface SBIconListView : UIView
+@property (nonatomic,copy) NSString * iconLocation;
+- (CGRect)iconLayoutRect;
+- (UIEdgeInsets)layoutInsetsForOrientation:(long long)orientation;
+- (CGSize)iconSpacing;
+- (CGSize)effectiveIconSpacing;
+- (unsigned long long)iconColumnsForCurrentOrientation;
+- (unsigned long long)iconsInRowForSpacingCalculation;
+@end
+
+@interface SBIconListViewLayoutMetrics : NSObject
+@property (nonatomic) unsigned long long columns;
+@property (nonatomic) unsigned long long columnsUsedForLayout;
+@property (nonatomic) UIEdgeInsets iconInsets;
+@property (nonatomic) CGSize iconSpacing;
+@end
+
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -100,34 +117,6 @@ static CGFloat ALEFullWidthForView(UIView *view) {
 	return width;
 }
 
-static CGRect ALEFullFrameForView(UIView *view) {
-	CGRect frame = view.bounds;
-
-	if (CGRectGetWidth(view.superview.bounds) > CGRectGetWidth(frame)) {
-		frame = view.superview.bounds;
-	}
-
-	if (CGRectGetWidth(view.window.bounds) > CGRectGetWidth(frame)) {
-		frame = view.window.bounds;
-	}
-
-	if (CGRectGetWidth(frame) > 0 && CGRectGetHeight(frame) > 0) {
-		frame.origin = CGPointZero;
-		return frame;
-	}
-
-	CGSize screenSize = [UIScreen mainScreen].bounds.size;
-	return CGRectMake(0, 0, screenSize.width, screenSize.height);
-}
-
-static void ALESetViewFrame(UIView *view, CGRect frame) {
-	if (!view) {
-		return;
-	}
-
-	view.frame = frame;
-}
-
 static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
 	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
 	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
@@ -145,16 +134,6 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
 		contentWidthConstraint.constant = fullWidth;
 	}
-
-	CGRect fullFrame = ALEFullFrameForView(overlayController.view);
-	UIViewController *rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
-	UIViewController *contentViewController = ALEValueForKey(overlayController, @"contentViewController");
-
-	ALESetViewFrame(rightSidebarViewController.view, fullFrame);
-	ALESetViewFrame(contentViewController.view, fullFrame);
-
-	UIViewController *avocadoViewController = ALEValueForKey(contentViewController, @"avocadoViewController");
-	ALESetViewFrame(avocadoViewController.view, fullFrame);
 }
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
@@ -178,6 +157,52 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		searchTextFieldHorizontalEdgeInsets.right = 23;
 		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
 	}
+}
+
+static BOOL ALEIsLandscape(void) {
+	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	return screenSize.width > screenSize.height;
+}
+
+static unsigned long long ALELibraryColumnCount(void) {
+	return ALEIsLandscape() ? 4 : 3;
+}
+
+static UIEdgeInsets ALELibraryLayoutInsets(UIEdgeInsets originalInsets) {
+	CGFloat horizontalInset = ALEIsLandscape() ? 72 : 48;
+	originalInsets.left = horizontalInset;
+	originalInsets.right = horizontalInset;
+	return originalInsets;
+}
+
+static BOOL ALEIsLibraryPodPreviewList(SBIconListView *listView) {
+	return ALEObjectIsKindOfClassNamed(listView, @"_SBHLibraryPodCategoryIconListView");
+}
+
+static BOOL ALEIsLibraryIconList(SBIconListView *listView) {
+	if (!listView) {
+		return NO;
+	}
+
+	if (ALEObjectIsKindOfClassNamed(listView, @"_SBHLibraryPodIconListView") || ALEObjectIsKindOfClassNamed(listView, @"SBHLibraryCategoryPodIconListView")) {
+		return YES;
+	}
+
+	NSString *iconLocation = nil;
+	if ([listView respondsToSelector:@selector(iconLocation)]) {
+		iconLocation = [listView iconLocation];
+	}
+
+	return [iconLocation isKindOfClass:[NSString class]] && [iconLocation rangeOfString:@"Library" options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static CGFloat ALELibraryIconListWidth(SBIconListView *listView) {
+	CGFloat width = ALEFullWidthForView(listView);
+	UIWindow *window = listView.window;
+	if (window) {
+		width = MAX(width, CGRectGetWidth(window.bounds));
+	}
+	return width;
 }
 
 %hook SBIconController
@@ -278,39 +303,98 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 %hook SBHLibraryPodFolderController
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	UIView *containerView = [self containerView];
-	CGRect containerFrame = containerView.frame;
-	[self.view setFrame:containerFrame];
+	CGRect frame = self.view.frame;
+	CGFloat fullWidth = ALEFullWidthForView(self.view);
+	if (fullWidth > CGRectGetWidth(frame)) {
+		frame.size.width = fullWidth;
+		self.view.frame = frame;
+	}
 }
 %end
 
-%hook _SBHLibraryPodIconListView
+%hook SBIconListView
+- (unsigned long long)iconColumnsForCurrentOrientation {
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		return ALELibraryColumnCount();
+	}
+
+	return %orig;
+}
+- (unsigned long long)iconsInRowForSpacingCalculation {
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		return ALELibraryColumnCount();
+	}
+
+	return %orig;
+}
+- (UIEdgeInsets)layoutInsetsForOrientation:(long long)orientation {
+	UIEdgeInsets origValue = %orig;
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		return ALELibraryLayoutInsets(origValue);
+	}
+
+	return origValue;
+}
+- (SBIconListViewLayoutMetrics *)layoutMetrics {
+	SBIconListViewLayoutMetrics *origValue = %orig;
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self) && [origValue respondsToSelector:@selector(setColumns:)] && [origValue respondsToSelector:@selector(setColumnsUsedForLayout:)]) {
+		unsigned long long columns = ALELibraryColumnCount();
+		origValue.columns = columns;
+		origValue.columnsUsedForLayout = columns;
+		if ([origValue respondsToSelector:@selector(setIconInsets:)]) {
+			origValue.iconInsets = ALELibraryLayoutInsets(origValue.iconInsets);
+		}
+		if ([origValue respondsToSelector:@selector(setIconSpacing:)]) {
+			CGSize spacing = origValue.iconSpacing;
+			CGFloat width = ALELibraryIconListWidth(self);
+			CGFloat horizontalInset = ALEIsLandscape() ? 72 : 48;
+			CGFloat iconWidth = 74;
+			spacing.width = MAX(spacing.width, (width - horizontalInset * 2 - iconWidth * columns) / MAX((CGFloat)(columns - 1), 1));
+			origValue.iconSpacing = spacing;
+		}
+	}
+
+	return origValue;
+}
 - (CGRect)frame {
 	CGRect origValue = %orig;
 	CGRect newContainerFrame = origValue;
-	newContainerFrame.size.width = 393;
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		newContainerFrame.size.width = ALELibraryIconListWidth(self);
+	}
 	return newContainerFrame;
 }
 - (CGRect)iconLayoutRect {
 	CGRect origValue = %orig;
 	CGRect newFrame = origValue;
-	newFrame.size.width = 393;
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		newFrame.origin.x = 0;
+		newFrame.size.width = ALELibraryIconListWidth(self);
+	}
 	return newFrame;
 }
 
 - (CGSize)iconSpacing {
 	CGSize origValue = %orig;
-	CGSize newSize = origValue;
-	newSize.width = 33;
-	newSize.height = 37;
-	return newSize;
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		CGFloat width = ALELibraryIconListWidth(self);
+		NSUInteger columns = ALELibraryColumnCount();
+		CGFloat horizontalInset = ALEIsLandscape() ? 72 : 48;
+		CGFloat iconWidth = 74;
+		origValue.width = MAX(origValue.width, (width - horizontalInset * 2 - iconWidth * columns) / MAX((CGFloat)(columns - 1), 1));
+	}
+	return origValue;
 }
 - (CGSize)effectiveIconSpacing {
 	CGSize origValue = %orig;
-	CGSize newSize = origValue;
-	newSize.width = 33;
-	newSize.height = 37;
-	return newSize;
+	if (ALEIsLibraryIconList(self) && !ALEIsLibraryPodPreviewList(self)) {
+		CGFloat width = ALELibraryIconListWidth(self);
+		NSUInteger columns = ALELibraryColumnCount();
+		CGFloat horizontalInset = ALEIsLandscape() ? 72 : 48;
+		CGFloat iconWidth = 74;
+		origValue.width = MAX(origValue.width, (width - horizontalInset * 2 - iconWidth * columns) / MAX((CGFloat)(columns - 1), 1));
+	}
+	return origValue;
 }
 %end
 
