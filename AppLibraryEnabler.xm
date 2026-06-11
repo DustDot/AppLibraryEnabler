@@ -63,6 +63,8 @@
 
 @interface SBHLibraryPodFolderView : UIView
 @property (nonatomic) BOOL centersContentIfPossible;
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView;
+- (void)scrollViewWillEndDragging:(UIScrollView *)scrollView withVelocity:(CGPoint)velocity targetContentOffset:(CGPoint *)targetContentOffset;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -130,6 +132,8 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
+static char ALELibraryCategoryFolderViewKey;
+
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
 	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
 		return;
@@ -175,6 +179,7 @@ static void ALESpreadLibraryPodFolderController(SBHLibraryPodFolderController *f
 		podFolderView = (SBHLibraryPodFolderView *)[folderController podFolderView];
 	}
 	if ([podFolderView respondsToSelector:@selector(setCentersContentIfPossible:)]) {
+		objc_setAssociatedObject(podFolderView, &ALELibraryCategoryFolderViewKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 		podFolderView.centersContentIfPossible = NO;
 		[podFolderView setNeedsLayout];
 	}
@@ -358,6 +363,21 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	ALESpreadLibraryPodFolderController(self);
+}
+%end
+
+%hook SBHLibraryPodFolderView
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+	%orig;
+	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderViewKey) boolValue] && scrollView.contentOffset.y < 0) {
+		[scrollView setContentOffset:CGPointMake(scrollView.contentOffset.x, 0) animated:NO];
+	}
+}
+- (void)scrollViewWillEndDragging:(UIScrollView *)scrollView withVelocity:(CGPoint)velocity targetContentOffset:(CGPoint *)targetContentOffset {
+	%orig;
+	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderViewKey) boolValue] && targetContentOffset && targetContentOffset->y < 0) {
+		targetContentOffset->y = 0;
+	}
 }
 %end
 
