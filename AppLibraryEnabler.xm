@@ -63,6 +63,8 @@
 
 @interface SBHLibraryPodFolderView : UIView
 @property (nonatomic) BOOL centersContentIfPossible;
+- (CGPoint)_restingContentOffsetForScrollOffset:(CGPoint)scrollOffset withVelocity:(CGPoint)velocity;
+- (CGSize)_scrollViewContentSize;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -130,6 +132,8 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
+static char ALELibraryCategoryFolderViewKey;
+
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
 	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
 		return;
@@ -175,6 +179,7 @@ static void ALESpreadLibraryPodFolderController(SBHLibraryPodFolderController *f
 		podFolderView = (SBHLibraryPodFolderView *)[folderController podFolderView];
 	}
 	if ([podFolderView respondsToSelector:@selector(setCentersContentIfPossible:)]) {
+		objc_setAssociatedObject(podFolderView, &ALELibraryCategoryFolderViewKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 		podFolderView.centersContentIfPossible = NO;
 		[podFolderView setNeedsLayout];
 	}
@@ -358,6 +363,26 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	ALESpreadLibraryPodFolderController(self);
+}
+%end
+
+%hook SBHLibraryPodFolderView
+- (CGPoint)_restingContentOffsetForScrollOffset:(CGPoint)scrollOffset withVelocity:(CGPoint)velocity {
+	CGPoint offset = %orig;
+	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderViewKey) boolValue]) {
+		offset.y = 0;
+	}
+	return offset;
+}
+- (CGSize)_scrollViewContentSize {
+	CGSize contentSize = %orig;
+	if ([objc_getAssociatedObject(self, &ALELibraryCategoryFolderViewKey) boolValue]) {
+		CGFloat height = CGRectGetHeight(self.bounds);
+		if (height > 0) {
+			contentSize.height = MIN(contentSize.height, height);
+		}
+	}
+	return contentSize;
 }
 %end
 
