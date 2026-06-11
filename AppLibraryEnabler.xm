@@ -58,15 +58,6 @@
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
 @end
 
-@interface SBIconListGridLayout : NSObject
-@property (nonatomic, readonly, copy) SBIconListGridLayoutConfiguration *layoutConfiguration;
-- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
-@end
-
-@interface SBHLibraryPodFolderController (AppLibraryEnabler)
-+ (id)iconLocation;
-@end
-
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -124,29 +115,6 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
-static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
-	if (firstObject == secondObject) {
-		return YES;
-	}
-	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
-		return NO;
-	}
-
-	return [firstObject isEqual:secondObject];
-}
-
-static char ALEAppLibraryRootLayoutKey;
-static BOOL ALEConfiguringAppLibraryRootLayout = NO;
-
-static BOOL ALEIsAppLibraryRootIconLocation(id iconLocation) {
-	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
-	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
-		return NO;
-	}
-
-	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
-}
-
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
 	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
 		return;
@@ -182,7 +150,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 }
 
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL categoriesRoot) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
 	if (!configuration) {
 		return;
 	}
@@ -192,10 +160,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat height = MIN(screenSize.width, screenSize.height);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = categoriesRoot ? 8 : 4;
+		configuration.numberOfLandscapeColumns = 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = categoriesRoot ? 6 : 3;
+		configuration.numberOfPortraitColumns = 3;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
@@ -245,43 +213,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 %hook SBHDefaultIconListLayoutProvider
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringAppLibraryRootLayout);
-}
-- (id)makeLayoutForIconLocation:(id)iconLocation {
-	BOOL previousConfiguringAppLibraryRootLayout = ALEConfiguringAppLibraryRootLayout;
-	ALEConfiguringAppLibraryRootLayout = ALEIsAppLibraryRootIconLocation(iconLocation);
-	id layout = %orig;
-	ALEConfiguringAppLibraryRootLayout = previousConfiguringAppLibraryRootLayout;
-
-	if (layout && ALEIsAppLibraryRootIconLocation(iconLocation)) {
-		objc_setAssociatedObject(layout, &ALEAppLibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	}
-	return layout;
-}
-- (id)layoutForIconLocation:(id)iconLocation {
-	BOOL previousConfiguringAppLibraryRootLayout = ALEConfiguringAppLibraryRootLayout;
-	ALEConfiguringAppLibraryRootLayout = ALEIsAppLibraryRootIconLocation(iconLocation);
-	id layout = %orig;
-	ALEConfiguringAppLibraryRootLayout = previousConfiguringAppLibraryRootLayout;
-
-	if (layout && ALEIsAppLibraryRootIconLocation(iconLocation)) {
-		objc_setAssociatedObject(layout, &ALEAppLibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	}
-	return layout;
-}
-%end
-
-%hook SBIconListGridLayout
-- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation {
-	unsigned long long origValue = %orig;
-	if ([objc_getAssociatedObject(self, &ALEAppLibraryRootLayoutKey) boolValue]) {
-		if (origValue == 8 || origValue == 6) {
-			return origValue;
-		}
-		return origValue >= 4 ? 8 : 6;
-	}
-
-	return origValue;
+	ALEConfigureAppLibraryGrid(configuration);
 }
 %end
 
