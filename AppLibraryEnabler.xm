@@ -50,6 +50,7 @@
 @property (nonatomic,readonly) UIView * containerView;
 - (UIView *)podFolderView;
 - (UIView *)currentIconListView;
+- (UIScrollView *)contentScrollView;
 @end
 @interface SBHLibraryPodCategoryFolderController : SBHLibraryPodFolderController
 @end
@@ -177,6 +178,20 @@ static void ALESpreadLibraryPodFolderController(SBHLibraryPodFolderController *f
 	if ([podFolderView respondsToSelector:@selector(setCentersContentIfPossible:)]) {
 		podFolderView.centersContentIfPossible = NO;
 		[podFolderView setNeedsLayout];
+	}
+
+	UIScrollView *contentScrollView = nil;
+	if ([folderController respondsToSelector:@selector(contentScrollView)]) {
+		contentScrollView = [folderController contentScrollView];
+	}
+	if ([contentScrollView isKindOfClass:[UIScrollView class]]) {
+		contentScrollView.alwaysBounceVertical = NO;
+		contentScrollView.bounces = NO;
+		contentScrollView.contentInset = UIEdgeInsetsZero;
+		contentScrollView.scrollIndicatorInsets = UIEdgeInsetsZero;
+		if (contentScrollView.contentOffset.y < 0) {
+			contentScrollView.contentOffset = CGPointMake(contentScrollView.contentOffset.x, 0);
+		}
 	}
 
 	SBIconListView *currentIconListView = nil;
