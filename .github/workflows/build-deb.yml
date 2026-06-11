@@ -33,6 +33,21 @@ jobs:
           set -o pipefail
           make clean package FINALPACKAGE=1 2>&1 | tee build.log
 
+      - name: Surface build failure
+        if: failure()
+        run: |
+          {
+            echo "Build failed. Last 80 lines of build.log:"
+            tail -n 80 build.log
+          } > build-tail.log
+          {
+            echo "### Build failed"
+            echo
+            echo '```text'
+            cat build-tail.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
