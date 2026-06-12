@@ -102,7 +102,6 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
-static CGRect ALELastLibraryRootContentFrameInWindow = CGRectZero;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -194,36 +193,37 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 }
 
 static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
-	if (ALEUpdatingLibrarySearchBarFrame || ![searchBar isKindOfClass:[UIView class]] || CGRectIsEmpty(ALELastLibraryRootContentFrameInWindow)) {
+	if (ALEUpdatingLibrarySearchBarFrame || ![searchBar isKindOfClass:[UIView class]]) {
 		return;
 	}
 
 	UIView *searchSuperview = searchBar.superview;
-	if (![searchSuperview isKindOfClass:[UIView class]] || !searchBar.window) {
+	if (![searchSuperview isKindOfClass:[UIView class]]) {
 		return;
 	}
 
-	if (searchBar.window != searchSuperview.window) {
-		return;
-	}
-
-	CGRect targetFrame = [searchSuperview convertRect:ALELastLibraryRootContentFrameInWindow fromView:searchBar.window];
-	CGFloat left = CGRectGetMinX(targetFrame);
-	CGFloat right = CGRectGetMaxX(targetFrame);
 	CGFloat superviewWidth = CGRectGetWidth(searchSuperview.bounds);
-	if (right <= left || left < -1.0 || right > superviewWidth + 1.0) {
+	if (superviewWidth <= 0) {
+		return;
+	}
+
+	BOOL landscape = ALEIsLandscapeScreen();
+	CGFloat horizontalMargin = landscape ? round(superviewWidth * 0.16) : round(superviewWidth * 0.105);
+	CGFloat left = horizontalMargin;
+	CGFloat width = superviewWidth - (horizontalMargin * 2.0);
+	if (width <= 0) {
 		return;
 	}
 
 	CGRect searchFrame = searchBar.frame;
-	if (fabs(CGRectGetMinX(searchFrame) - left) <= 1.0 && fabs(CGRectGetWidth(searchFrame) - (right - left)) <= 1.0) {
+	if (fabs(CGRectGetMinX(searchFrame) - left) <= 1.0 && fabs(CGRectGetWidth(searchFrame) - width) <= 1.0) {
 		return;
 	}
 
 	ALEUpdatingLibrarySearchBarFrame = YES;
 	@try {
 		searchFrame.origin.x = left;
-		searchFrame.size.width = right - left;
+		searchFrame.size.width = width;
 		searchBar.frame = searchFrame;
 	} @finally {
 		ALEUpdatingLibrarySearchBarFrame = NO;
@@ -504,11 +504,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
-	CGFloat searchEdgeOutset = MIN((CGFloat)52.0, MAX((CGFloat)36.0, podWidth * 0.15));
-	CGFloat contentMinX = MAX((CGFloat)0, horizontalInset - searchEdgeOutset);
-	CGFloat contentMaxX = MIN(listWidth, horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth + searchEdgeOutset);
-	CGRect contentFrame = CGRectMake(contentMinX, 0, contentMaxX - contentMinX, 1);
-	ALELastLibraryRootContentFrameInWindow = listView.window ? [listView convertRect:contentFrame toView:listView.window] : CGRectZero;
 	if (listView.window) {
 		ALELayoutLibrarySearchBarsInView(listView.window);
 	}
