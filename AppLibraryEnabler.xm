@@ -102,6 +102,9 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
+static BOOL ALEHasLibrarySearchHorizontalRange = NO;
+static CGFloat ALELibrarySearchMinXRatio = 0;
+static CGFloat ALELibrarySearchMaxXRatio = 1;
 
 static BOOL ALEIsLandscapeScreen(void);
 
@@ -209,10 +212,13 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	BOOL landscape = ALEIsLandscapeScreen();
-	CGFloat horizontalMargin = landscape ? round(superviewWidth * 0.16) : round(superviewWidth * 0.105);
-	CGFloat left = horizontalMargin;
-	CGFloat width = superviewWidth - (horizontalMargin * 2.0);
+	if (!ALEHasLibrarySearchHorizontalRange || ALELibrarySearchMaxXRatio <= ALELibrarySearchMinXRatio) {
+		return;
+	}
+
+	CGFloat left = round(superviewWidth * ALELibrarySearchMinXRatio);
+	CGFloat right = round(superviewWidth * ALELibrarySearchMaxXRatio);
+	CGFloat width = right - left;
 	if (width <= 0) {
 		return;
 	}
@@ -506,8 +512,19 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
-	if (listView.window) {
-		ALELayoutLibrarySearchBarsInView(listView.window);
+
+	CGFloat laidOutContentMinX = horizontalInset;
+	CGFloat laidOutContentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
+	CGFloat horizontalOutset = MAX((CGFloat)0, MIN(columnGap * 0.5, horizontalInset));
+	CGFloat searchMinX = MAX((CGFloat)0, laidOutContentMinX - horizontalOutset);
+	CGFloat searchMaxX = MIN(listWidth, laidOutContentMaxX + horizontalOutset);
+	if (searchMaxX > searchMinX && listWidth > 0) {
+		ALELibrarySearchMinXRatio = searchMinX / listWidth;
+		ALELibrarySearchMaxXRatio = searchMaxX / listWidth;
+		ALEHasLibrarySearchHorizontalRange = YES;
+		if (listView.window) {
+			ALELayoutLibrarySearchBarsInView(listView.window);
+		}
 	}
 
 	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
