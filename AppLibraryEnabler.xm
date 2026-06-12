@@ -67,6 +67,9 @@ struct SBHIconGridSize {
 - (struct SBHIconGridSize)listGridSize;
 @end
 
+@interface SBHLibraryCategoriesRootFolder : SBFolder
+@end
+
 @interface SBHLibraryCategoryFolder : SBFolder
 - (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
 @end
@@ -80,7 +83,16 @@ struct SBHIconGridSize {
 - (struct SBHIconGridSize)gridSize;
 @end
 
+@interface SBHLibraryPodFolderView : UIView
+- (void)setFolder:(SBFolder *)folder;
+- (CGSize)_iconListViewSize;
+- (double)_pageWidth;
+- (CGRect)_iconListFrameForPageRect:(CGRect)pageRect atIndex:(unsigned long long)index;
+- (CGRect)_frameForIconListAtIndex:(unsigned long long)index;
+@end
+
 static char ALEExpandedLibraryCategoryFolderKey;
+static char ALEWideLibraryPodFolderViewKey;
 static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -226,6 +238,39 @@ static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconG
 	return gridSize;
 }
 
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
+static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder);
+
+static BOOL ALEShouldUseWideLibraryPodFolderViewForFolder(SBFolder *folder) {
+	return ALEIsLibraryCategoriesRootFolder(folder) || ALEIsExpandedLibraryCategoryFolder(folder);
+}
+
+static BOOL ALEIsWideLibraryPodFolderView(SBHLibraryPodFolderView *folderView) {
+	return [objc_getAssociatedObject(folderView, &ALEWideLibraryPodFolderViewKey) boolValue];
+}
+
+static CGFloat ALELibraryVisualWidthForView(UIView *view) {
+	CGFloat width = ALEFullWidthForView(view);
+	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	width = MAX(width, MAX(screenSize.width, screenSize.height));
+	return width;
+}
+
+static CGRect ALECenteredFullWidthFrameForFolderView(SBHLibraryPodFolderView *folderView, CGRect originalFrame) {
+	CGFloat fullWidth = ALELibraryVisualWidthForView(folderView);
+	if (fullWidth <= CGRectGetWidth(originalFrame)) {
+		return originalFrame;
+	}
+
+	CGRect frame = originalFrame;
+	frame.size.width = fullWidth;
+	frame.origin.x = floor((CGRectGetWidth(folderView.bounds) - fullWidth) / 2.0);
+	return frame;
+}
+
 static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
 	return [objc_getAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey) boolValue];
 }
@@ -319,6 +364,45 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 	}
 
 	return gridSize;
+}
+%end
+
+%hook SBHLibraryPodFolderView
+- (void)setFolder:(SBFolder *)folder {
+	%orig;
+	if (ALEShouldUseWideLibraryPodFolderViewForFolder(folder)) {
+		objc_setAssociatedObject(self, &ALEWideLibraryPodFolderViewKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	} else {
+		objc_setAssociatedObject(self, &ALEWideLibraryPodFolderViewKey, nil, OBJC_ASSOCIATION_ASSIGN);
+	}
+}
+- (CGSize)_iconListViewSize {
+	CGSize size = %orig;
+	if (ALEIsWideLibraryPodFolderView(self)) {
+		size.width = MAX(size.width, ALELibraryVisualWidthForView(self));
+	}
+	return size;
+}
+- (double)_pageWidth {
+	double width = %orig;
+	if (ALEIsWideLibraryPodFolderView(self)) {
+		width = MAX(width, ALELibraryVisualWidthForView(self));
+	}
+	return width;
+}
+- (CGRect)_iconListFrameForPageRect:(CGRect)pageRect atIndex:(unsigned long long)index {
+	CGRect frame = %orig;
+	if (ALEIsWideLibraryPodFolderView(self)) {
+		frame = ALECenteredFullWidthFrameForFolderView(self, frame);
+	}
+	return frame;
+}
+- (CGRect)_frameForIconListAtIndex:(unsigned long long)index {
+	CGRect frame = %orig;
+	if (ALEIsWideLibraryPodFolderView(self)) {
+		frame = ALECenteredFullWidthFrameForFolderView(self, frame);
+	}
+	return frame;
 }
 %end
 
