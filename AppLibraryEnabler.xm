@@ -68,11 +68,14 @@ struct SBHIconGridSizeClassSizes {
 @property (nonatomic) CGSize listSizeForIconSpacingCalculation;
 @property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
-@property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
 @end
 
 @interface SBFolder : NSObject
 - (struct SBHIconGridSize)listGridSize;
+@end
+
+@interface SBIcon : NSObject
+- (bool)isCategoryIcon;
 @end
 
 @interface SBHLibraryCategoryFolder : SBFolder
@@ -86,6 +89,7 @@ struct SBHIconGridSizeClassSizes {
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) SBFolder *folder;
 - (struct SBHIconGridSize)gridSize;
++ (id)iconGridCellInfoForIcons:(NSArray *)icons gridSize:(struct SBHIconGridSize)gridSize gridSizeClassSizes:(struct SBHIconGridSizeClassSizes)gridSizeClassSizes options:(unsigned long long)options;
 @end
 
 static char ALEExpandedLibraryCategoryFolderKey;
@@ -213,14 +217,6 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 		insets.right = 48;
 		configuration.portraitLayoutInsets = insets;
 	}
-	if ([configuration respondsToSelector:@selector(setIconGridSizeClassSizes:)]) {
-		struct SBHIconGridSizeClassSizes sizes = configuration.iconGridSizeClassSizes;
-		sizes.large.columns = 1;
-		sizes.large.rows = 1;
-		sizes.extraLarge.columns = 1;
-		sizes.extraLarge.rows = 1;
-		configuration.iconGridSizeClassSizes = sizes;
-	}
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
@@ -240,6 +236,47 @@ static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconG
 	}
 
 	return gridSize;
+}
+
+static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGridSize originalGridSize) {
+	struct SBHIconGridSize gridSize = originalGridSize;
+
+	if (ALEIsLandscapeScreen()) {
+		gridSize.columns = MAX(gridSize.columns, 4);
+		gridSize.rows = MAX(gridSize.rows, 2);
+	} else {
+		gridSize.columns = MAX(gridSize.columns, 3);
+		gridSize.rows = MAX(gridSize.rows, 3);
+	}
+
+	return gridSize;
+}
+
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
+static BOOL ALEIconsAreLibraryCategoryPods(NSArray *icons) {
+	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
+		return NO;
+	}
+
+	for (id icon in icons) {
+		if (!ALEObjectIsKindOfClassNamed(icon, @"SBHLibraryPodCategoryIcon")) {
+			return NO;
+		}
+	}
+
+	return YES;
+}
+
+static struct SBHIconGridSizeClassSizes ALECategoryPodGridSizeClassSizes(struct SBHIconGridSizeClassSizes sizes) {
+	struct SBHIconGridSize oneCell = { 1, 1 };
+	sizes.small = oneCell;
+	sizes.medium = oneCell;
+	sizes.large = oneCell;
+	sizes.extraLarge = oneCell;
+	return sizes;
 }
 
 static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
@@ -319,6 +356,9 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBFolder
 - (struct SBHIconGridSize)listGridSize {
 	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
+	}
 	if (ALEIsExpandedLibraryCategoryFolder(self)) {
 		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
@@ -330,11 +370,22 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBIconListModel
 - (struct SBHIconGridSize)gridSize {
 	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
+	}
 	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
 		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
 
 	return gridSize;
+}
+
++ (id)iconGridCellInfoForIcons:(NSArray *)icons gridSize:(struct SBHIconGridSize)gridSize gridSizeClassSizes:(struct SBHIconGridSizeClassSizes)gridSizeClassSizes options:(unsigned long long)options {
+	if (ALEIconsAreLibraryCategoryPods(icons)) {
+		gridSizeClassSizes = ALECategoryPodGridSizeClassSizes(gridSizeClassSizes);
+	}
+
+	return %orig(icons, gridSize, gridSizeClassSizes, options);
 }
 %end
 
