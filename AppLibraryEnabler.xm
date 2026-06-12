@@ -86,6 +86,8 @@ struct SBHIconGridSize {
 @property (nonatomic, readonly) SBIconListModel *model;
 @property (nonatomic, readonly, copy) NSArray *icons;
 - (id)iconViewForIcon:(id)icon;
+- (void)setFrame:(CGRect)frame;
+- (void)setBounds:(CGRect)bounds;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -365,21 +367,21 @@ static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 		return;
 	}
 
-	CGFloat horizontalInset = landscape ? MAX((CGFloat)96.0, listWidth * 0.065) : MAX((CGFloat)56.0, listWidth * 0.075);
+	CGFloat horizontalInset = landscape ? MAX((CGFloat)122.0, listWidth * 0.075) : MAX((CGFloat)72.0, listWidth * 0.085);
 	CGFloat availableWidth = listWidth - (horizontalInset * 2.0);
 	if (availableWidth < (podWidth * columnCount)) {
-		horizontalInset = 24.0;
+		horizontalInset = 36.0;
 		availableWidth = listWidth - (horizontalInset * 2.0);
 	}
 
 	CGFloat columnGap = columnCount > 1 ? (availableWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
-	if (columnGap < 12.0) {
-		columnGap = 12.0;
+	if (columnGap < 24.0) {
+		columnGap = 24.0;
 	}
 
 	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
-	if (rowStep <= 0) {
-		rowStep = podHeight + 44.0;
+	if (rowStep < podHeight + 28.0) {
+		rowStep = podHeight + 36.0;
 	}
 
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
@@ -478,7 +480,31 @@ static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 %end
 
 %hook SBIconListView
+- (void)setFrame:(CGRect)frame {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
+}
+- (void)setBounds:(CGRect)bounds {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
+}
 - (void)layoutSubviews {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
+}
+- (void)layoutIconsIfNeeded {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
+}
+- (void)layoutIconsIfNeeded:(double)arg1 {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
+}
+- (void)layoutIconsIfNeededUsingAnimator:(id)arg1 options:(unsigned long long)arg2 {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
+}
+- (void)layoutIconsIfNeededWithAnimationType:(long long)arg1 options:(unsigned long long)arg2 {
 	%orig;
 	ALELayoutLibraryCategoriesRootListView(self);
 }
