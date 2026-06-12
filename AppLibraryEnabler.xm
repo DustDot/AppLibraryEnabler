@@ -82,6 +82,13 @@ struct SBHIconGridSize {
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
 
+@interface SBIconListView : UIView
+@property (nonatomic, readonly) SBIconListModel *model;
+- (struct SBHIconGridSize)gridSizeForCurrentOrientation;
+- (unsigned long long)iconColumnsForCurrentOrientation;
+- (unsigned long long)iconsInRowForSpacingCalculation;
+@end
+
 @interface SBIconListGridCellInfo : NSObject
 @property (nonatomic) struct SBHIconGridSize gridSize;
 @property (nonatomic) unsigned long long numberOfUsedColumns;
@@ -294,6 +301,19 @@ static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *g
 	gridCellInfo.numberOfUsedRows = MAX((unsigned long long)1, podRows * 2);
 }
 
+static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
+	if (!listView || ![listView respondsToSelector:@selector(model)]) {
+		return NO;
+	}
+
+	SBIconListModel *model = listView.model;
+	if (!model || ![model respondsToSelector:@selector(folder)]) {
+		return NO;
+	}
+
+	return ALEIsLibraryCategoriesRootFolder(model.folder);
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -371,6 +391,35 @@ static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *g
 	}
 
 	return gridCellInfo;
+}
+%end
+
+%hook SBIconListView
+- (struct SBHIconGridSize)gridSizeForCurrentOrientation {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
+	}
+
+	return gridSize;
+}
+- (unsigned long long)iconColumnsForCurrentOrientation {
+	unsigned long long columns = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		struct SBHIconGridSize gridSize = { (unsigned short)columns, 0 };
+		return ALELibraryCategoriesRootGridSize(gridSize).columns;
+	}
+
+	return columns;
+}
+- (unsigned long long)iconsInRowForSpacingCalculation {
+	unsigned long long iconsInRow = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		struct SBHIconGridSize gridSize = { (unsigned short)iconsInRow, 0 };
+		return ALELibraryCategoriesRootGridSize(gridSize).columns;
+	}
+
+	return iconsInRow;
 }
 %end
 
