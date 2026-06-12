@@ -101,6 +101,7 @@ struct SBHIconGridSize {
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
+static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
 static CGRect ALELastLibraryRootContentFrameInWindow = CGRectZero;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -193,7 +194,7 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 }
 
 static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]] || CGRectIsEmpty(ALELastLibraryRootContentFrameInWindow)) {
+	if (ALEUpdatingLibrarySearchBarFrame || ![searchBar isKindOfClass:[UIView class]] || CGRectIsEmpty(ALELastLibraryRootContentFrameInWindow)) {
 		return;
 	}
 
@@ -219,9 +220,14 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	searchFrame.origin.x = left;
-	searchFrame.size.width = right - left;
-	searchBar.frame = searchFrame;
+	ALEUpdatingLibrarySearchBarFrame = YES;
+	@try {
+		searchFrame.origin.x = left;
+		searchFrame.size.width = right - left;
+		searchBar.frame = searchFrame;
+	} @finally {
+		ALEUpdatingLibrarySearchBarFrame = NO;
+	}
 }
 
 static void ALELayoutLibrarySearchBarsInView(UIView *view) {
@@ -498,8 +504,9 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
-	CGFloat contentMinX = horizontalInset;
-	CGFloat contentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
+	CGFloat searchEdgeOutset = MIN((CGFloat)52.0, MAX((CGFloat)36.0, podWidth * 0.15));
+	CGFloat contentMinX = MAX((CGFloat)0, horizontalInset - searchEdgeOutset);
+	CGFloat contentMaxX = MIN(listWidth, horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth + searchEdgeOutset);
 	CGRect contentFrame = CGRectMake(contentMinX, 0, contentMaxX - contentMinX, 1);
 	ALELastLibraryRootContentFrameInWindow = listView.window ? [listView convertRect:contentFrame toView:listView.window] : CGRectZero;
 	if (listView.window) {
@@ -730,6 +737,22 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 
 %hook SBHSearchBar
 - (void)setFrame:(CGRect)frame {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)setBounds:(CGRect)bounds {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)layoutSubviews {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)didMoveToSuperview {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)didMoveToWindow {
 	%orig;
 	ALELayoutLibrarySearchBar(self);
 }
