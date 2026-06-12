@@ -77,7 +77,18 @@ struct SBHIconGridSize {
 
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) SBFolder *folder;
+@property (nonatomic, readonly) unsigned long long numberOfIcons;
 - (struct SBHIconGridSize)gridSize;
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
+@end
+
+@interface SBIconListGridCellInfo : NSObject
+@property (nonatomic) struct SBHIconGridSize gridSize;
+@property (nonatomic) unsigned long long numberOfUsedColumns;
+@property (nonatomic) unsigned long long numberOfUsedRows;
+- (void)clearAllIconAndGridCellIndexes;
+- (void)setGridCellIndex:(unsigned long long)gridCellIndex forIconIndex:(unsigned long long)iconIndex;
+- (void)setIconIndex:(unsigned long long)iconIndex forGridCellIndex:(unsigned long long)gridCellIndex;
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
@@ -249,6 +260,40 @@ static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGri
 	return gridSize;
 }
 
+static unsigned long long ALELibraryCategoriesRootPodColumnsForGridSize(struct SBHIconGridSize gridSize) {
+	return MAX((unsigned long long)1, (unsigned long long)gridSize.columns / 2);
+}
+
+static unsigned long long ALELibraryCategoriesRootGridCellIndexForIconIndex(NSUInteger iconIndex, struct SBHIconGridSize gridSize) {
+	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
+	unsigned long long row = iconIndex / podColumns;
+	unsigned long long column = iconIndex % podColumns;
+	return (row * 2 * gridSize.columns) + (column * 2);
+}
+
+static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *gridCellInfo, NSUInteger iconCount, struct SBHIconGridSize gridSize) {
+	if (!gridCellInfo || iconCount == 0 || gridSize.columns == 0) {
+		return;
+	}
+
+	gridCellInfo.gridSize = gridSize;
+	[gridCellInfo clearAllIconAndGridCellIndexes];
+
+	for (NSUInteger iconIndex = 0; iconIndex < iconCount; iconIndex++) {
+		unsigned long long gridCellIndex = ALELibraryCategoriesRootGridCellIndexForIconIndex(iconIndex, gridSize);
+		[gridCellInfo setGridCellIndex:gridCellIndex forIconIndex:iconIndex];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + 1];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + gridSize.columns];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + gridSize.columns + 1];
+	}
+
+	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
+	unsigned long long podRows = ((unsigned long long)iconCount + podColumns - 1) / podColumns;
+	gridCellInfo.numberOfUsedColumns = MIN((unsigned long long)gridSize.columns, podColumns * 2);
+	gridCellInfo.numberOfUsedRows = MAX((unsigned long long)1, podRows * 2);
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -317,6 +362,15 @@ static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGri
 	}
 
 	return gridSize;
+}
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
+	id gridCellInfo = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(gridSize);
+		ALEReflowLibraryCategoriesRootGridCellInfo((SBIconListGridCellInfo *)gridCellInfo, self.numberOfIcons, rootGridSize);
+	}
+
+	return gridCellInfo;
 }
 %end
 
