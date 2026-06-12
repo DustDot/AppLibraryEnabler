@@ -48,7 +48,6 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
-- (UIView *)currentIconListView;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -84,18 +83,7 @@ struct SBHIconGridSize {
 - (struct SBHIconGridSize)gridSize;
 @end
 
-@interface SBIconListView : UIView
-@property (nonatomic) BOOL adjustsColumnPositionsForFullScreenWidth;
-@property (nonatomic) BOOL automaticallyAdjustsLayoutMetricsToFit;
-@property (nonatomic) BOOL boundsSizeTracksContentSize;
-@property (nonatomic) UIEdgeInsets additionalLayoutInsets;
-@property (nonatomic, retain) SBIconListModel *model;
-- (unsigned long long)iconColumnsForCurrentOrientation;
-- (unsigned long long)iconsInRowForSpacingCalculation;
-@end
-
 static char ALEExpandedLibraryCategoryFolderKey;
-static char ALELibraryCategoriesRootListViewKey;
 static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -259,43 +247,6 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
-static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
-	if ([objc_getAssociatedObject(listView, &ALELibraryCategoriesRootListViewKey) boolValue]) {
-		return YES;
-	}
-
-	SBIconListModel *model = nil;
-	if ([listView respondsToSelector:@selector(model)]) {
-		model = listView.model;
-	}
-	return ALEIsLibraryCategoriesRootFolder(model.folder);
-}
-
-static unsigned long long ALELibraryCategoriesRootColumns(void) {
-	return ALEIsLandscapeScreen() ? 4 : 3;
-}
-
-static void ALEConfigureLibraryCategoriesRootListView(SBIconListView *listView) {
-	if (!listView || !ALEIsLibraryCategoriesRootListView(listView)) {
-		return;
-	}
-
-	objc_setAssociatedObject(listView, &ALELibraryCategoriesRootListViewKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	if ([listView respondsToSelector:@selector(setAdjustsColumnPositionsForFullScreenWidth:)]) {
-		listView.adjustsColumnPositionsForFullScreenWidth = YES;
-	}
-	if ([listView respondsToSelector:@selector(setAutomaticallyAdjustsLayoutMetricsToFit:)]) {
-		listView.automaticallyAdjustsLayoutMetricsToFit = YES;
-	}
-	if ([listView respondsToSelector:@selector(setBoundsSizeTracksContentSize:)]) {
-		listView.boundsSizeTracksContentSize = NO;
-	}
-	if ([listView respondsToSelector:@selector(setAdditionalLayoutInsets:)]) {
-		listView.additionalLayoutInsets = UIEdgeInsetsZero;
-	}
-	[listView setNeedsLayout];
-}
-
 static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
 	return [objc_getAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey) boolValue];
 }
@@ -398,25 +349,6 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 }
 %end
 
-%hook SBIconListView
-- (unsigned long long)iconColumnsForCurrentOrientation {
-	unsigned long long origValue = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		return MAX(origValue, ALELibraryCategoriesRootColumns());
-	}
-
-	return origValue;
-}
-- (unsigned long long)iconsInRowForSpacingCalculation {
-	unsigned long long origValue = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		return MAX(origValue, ALELibraryCategoriesRootColumns());
-	}
-
-	return origValue;
-}
-%end
-
 %hook SBHomeScreenOverlayViewController
 - (CGFloat)contentWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
@@ -487,18 +419,9 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBHLibraryPodFolderController
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	if ([self respondsToSelector:@selector(currentIconListView)]) {
-		ALEConfigureLibraryCategoriesRootListView((SBIconListView *)[self currentIconListView]);
-	}
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
-}
-- (void)viewDidLayoutSubviews {
-	%orig;
-	if ([self respondsToSelector:@selector(currentIconListView)]) {
-		ALEConfigureLibraryCategoriesRootListView((SBIconListView *)[self currentIconListView]);
-	}
 }
 %end
 
