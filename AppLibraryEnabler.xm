@@ -50,18 +50,26 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+struct SBHIconGridSize {
+	unsigned short columns;
+	unsigned short rows;
+};
+
+struct SBHIconGridSizeClassSizes {
+	struct SBHIconGridSize small;
+	struct SBHIconGridSize medium;
+	struct SBHIconGridSize large;
+	struct SBHIconGridSize extraLarge;
+};
+
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
 @property (nonatomic) unsigned long long numberOfPortraitColumns;
 @property (nonatomic) CGSize listSizeForIconSpacingCalculation;
 @property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
+@property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
 @end
-
-struct SBHIconGridSize {
-	unsigned short columns;
-	unsigned short rows;
-};
 
 @interface SBFolder : NSObject
 - (struct SBHIconGridSize)listGridSize;
@@ -204,6 +212,14 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 		insets.left = 48;
 		insets.right = 48;
 		configuration.portraitLayoutInsets = insets;
+	}
+	if ([configuration respondsToSelector:@selector(setIconGridSizeClassSizes:)]) {
+		struct SBHIconGridSizeClassSizes sizes = configuration.iconGridSizeClassSizes;
+		sizes.large.columns = 1;
+		sizes.large.rows = 1;
+		sizes.extraLarge.columns = 1;
+		sizes.extraLarge.rows = 1;
+		configuration.iconGridSizeClassSizes = sizes;
 	}
 }
 
