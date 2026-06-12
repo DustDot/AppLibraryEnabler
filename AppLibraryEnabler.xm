@@ -67,6 +67,9 @@ struct SBHIconGridSize {
 - (struct SBHIconGridSize)listGridSize;
 @end
 
+@interface SBHLibraryCategoriesRootFolder : SBFolder
+@end
+
 @interface SBHLibraryCategoryFolder : SBFolder
 - (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
 @end
@@ -226,6 +229,24 @@ static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconG
 	return gridSize;
 }
 
+static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGridSize originalGridSize) {
+	struct SBHIconGridSize gridSize = originalGridSize;
+
+	if (ALEIsLandscapeScreen()) {
+		gridSize.columns = MAX(gridSize.columns, 4);
+		gridSize.rows = MAX(gridSize.rows, 2);
+	} else {
+		gridSize.columns = MAX(gridSize.columns, 3);
+		gridSize.rows = MAX(gridSize.rows, 3);
+	}
+
+	return gridSize;
+}
+
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
 static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
 	return [objc_getAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey) boolValue];
 }
@@ -303,6 +324,9 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBFolder
 - (struct SBHIconGridSize)listGridSize {
 	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
+	}
 	if (ALEIsExpandedLibraryCategoryFolder(self)) {
 		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
@@ -314,6 +338,9 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBIconListModel
 - (struct SBHIconGridSize)gridSize {
 	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
+	}
 	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
 		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
