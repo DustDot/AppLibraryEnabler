@@ -114,6 +114,26 @@ static void ALELogOnce(NSString *key, NSString *format, ...) {
 	NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
 	va_end(args);
 	NSLog(@"[AppLibraryEnabler] %@", message);
+
+	NSString *logPath = @"/var/mobile/Library/Logs/AppLibraryEnabler.log";
+	NSString *logDirectory = [logPath stringByDeletingLastPathComponent];
+	[[NSFileManager defaultManager] createDirectoryAtPath:logDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+
+	NSString *line = [NSString stringWithFormat:@"%@ %@\n", [NSDate date], message];
+	NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
+	NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:logPath];
+	if (!fileHandle) {
+		[[NSFileManager defaultManager] createFileAtPath:logPath contents:nil attributes:nil];
+		fileHandle = [NSFileHandle fileHandleForWritingAtPath:logPath];
+	}
+	if (fileHandle) {
+		@try {
+			[fileHandle seekToEndOfFile];
+			[fileHandle writeData:data];
+			[fileHandle closeFile];
+		} @catch (NSException *exception) {
+		}
+	}
 }
 
 static id ALEValueForKey(id object, NSString *key) {
