@@ -18,10 +18,6 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-@interface UIView (AppLibraryEnabler)
-- (id)_viewControllerForAncestor;
-@end
-
 @interface SBIconView : UIView
 @end
 
@@ -105,9 +101,7 @@ struct SBHIconGridSize {
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
-static CGFloat ALELastLibraryRootListWidth = 0;
-static CGFloat ALELastLibraryRootContentMinX = 0;
-static CGFloat ALELastLibraryRootContentMaxX = 0;
+static CGRect ALELastLibraryRootContentFrameInWindow = CGRectZero;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -199,25 +193,24 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 }
 
 static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]] || ALELastLibraryRootListWidth <= 0 || ALELastLibraryRootContentMaxX <= ALELastLibraryRootContentMinX) {
-		return;
-	}
-
-	id controller = [searchBar _viewControllerForAncestor];
-	if (controller && !ALEIsLibraryController(controller)) {
+	if (![searchBar isKindOfClass:[UIView class]] || CGRectIsEmpty(ALELastLibraryRootContentFrameInWindow)) {
 		return;
 	}
 
 	UIView *searchSuperview = searchBar.superview;
-	CGFloat superviewWidth = CGRectGetWidth(searchSuperview.bounds);
-	if (superviewWidth <= 0) {
+	if (![searchSuperview isKindOfClass:[UIView class]] || !searchBar.window) {
 		return;
 	}
 
-	CGFloat scale = superviewWidth / ALELastLibraryRootListWidth;
-	CGFloat left = ALELastLibraryRootContentMinX * scale;
-	CGFloat right = ALELastLibraryRootContentMaxX * scale;
-	if (right <= left || right > superviewWidth + 1.0) {
+	if (searchBar.window != searchSuperview.window) {
+		return;
+	}
+
+	CGRect targetFrame = [searchSuperview convertRect:ALELastLibraryRootContentFrameInWindow fromView:searchBar.window];
+	CGFloat left = CGRectGetMinX(targetFrame);
+	CGFloat right = CGRectGetMaxX(targetFrame);
+	CGFloat superviewWidth = CGRectGetWidth(searchSuperview.bounds);
+	if (right <= left || left < -1.0 || right > superviewWidth + 1.0) {
 		return;
 	}
 
@@ -229,6 +222,20 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	searchFrame.origin.x = left;
 	searchFrame.size.width = right - left;
 	searchBar.frame = searchFrame;
+}
+
+static void ALELayoutLibrarySearchBarsInView(UIView *view) {
+	if (![view isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	if ([view isKindOfClass:NSClassFromString(@"SBHSearchBar")]) {
+		ALELayoutLibrarySearchBar((SBHSearchBar *)view);
+	}
+
+	for (UIView *subview in view.subviews) {
+		ALELayoutLibrarySearchBarsInView(subview);
+	}
 }
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
@@ -491,9 +498,13 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
-	ALELastLibraryRootListWidth = listWidth;
-	ALELastLibraryRootContentMinX = horizontalInset;
-	ALELastLibraryRootContentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
+	CGFloat contentMinX = horizontalInset;
+	CGFloat contentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
+	CGRect contentFrame = CGRectMake(contentMinX, 0, contentMaxX - contentMinX, 1);
+	ALELastLibraryRootContentFrameInWindow = listView.window ? [listView convertRect:contentFrame toView:listView.window] : CGRectZero;
+	if (listView.window) {
+		ALELayoutLibrarySearchBarsInView(listView.window);
+	}
 
 	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
