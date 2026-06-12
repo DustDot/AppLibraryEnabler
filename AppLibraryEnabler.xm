@@ -17,6 +17,8 @@
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <dispatch/dispatch.h>
+#import <stdarg.h>
 
 @interface UIView (AppLibraryEnabler)
 - (id)_viewControllerForAncestor;
@@ -48,6 +50,8 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
+- (UIView *)currentIconListView;
+- (UIView *)podFolderView;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -80,8 +84,37 @@ struct SBHIconGridSize {
 - (struct SBHIconGridSize)gridSize;
 @end
 
+@interface SBIconListView : UIView
+@property (nonatomic, retain) SBIconListModel *model;
+@property (nonatomic, copy) NSString *iconLocation;
+- (unsigned long long)iconColumnsForCurrentOrientation;
+- (unsigned long long)iconRowsForCurrentOrientation;
+- (unsigned long long)iconsInRowForSpacingCalculation;
+@end
+
 static char ALEExpandedLibraryCategoryFolderKey;
 static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth;
+
+static void ALELogOnce(NSString *key, NSString *format, ...) {
+	static NSMutableSet *loggedKeys = nil;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		loggedKeys = [NSMutableSet set];
+	});
+
+	@synchronized(loggedKeys) {
+		if ([loggedKeys containsObject:key]) {
+			return;
+		}
+		[loggedKeys addObject:key];
+	}
+
+	va_list args;
+	va_start(args, format);
+	NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+	va_end(args);
+	NSLog(@"[AppLibraryEnabler] %@", message);
+}
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -205,6 +238,74 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 		insets.right = 48;
 		configuration.portraitLayoutInsets = insets;
 	}
+
+	ALELogOnce(@"app-library-configuration", @"App Library configuration class=%@ landscapeColumns=%llu portraitColumns=%llu listSize=%@ landscapeInsets=%@ portraitInsets=%@",
+		NSStringFromClass([configuration class]),
+		configuration.numberOfLandscapeColumns,
+		configuration.numberOfPortraitColumns,
+		NSStringFromCGSize(configuration.listSizeForIconSpacingCalculation),
+		NSStringFromUIEdgeInsets(configuration.landscapeLayoutInsets),
+		NSStringFromUIEdgeInsets(configuration.portraitLayoutInsets)
+	);
+}
+
+static void ALELogLibraryPodController(SBHLibraryPodFolderController *controller, NSString *phase) {
+	if (!controller) {
+		return;
+	}
+
+	UIView *containerView = nil;
+	UIView *podFolderView = nil;
+	SBIconListView *currentIconListView = nil;
+
+	if ([controller respondsToSelector:@selector(containerView)]) {
+		containerView = [controller containerView];
+	}
+	if ([controller respondsToSelector:@selector(podFolderView)]) {
+		podFolderView = [controller podFolderView];
+	}
+	if ([controller respondsToSelector:@selector(currentIconListView)]) {
+		currentIconListView = (SBIconListView *)[controller currentIconListView];
+	}
+
+	SBIconListModel *model = nil;
+	SBFolder *folder = nil;
+	if ([currentIconListView respondsToSelector:@selector(model)]) {
+		model = currentIconListView.model;
+		folder = model.folder;
+	}
+
+	unsigned long long columns = 0;
+	unsigned long long rows = 0;
+	unsigned long long spacingColumns = 0;
+	if ([currentIconListView respondsToSelector:@selector(iconColumnsForCurrentOrientation)]) {
+		columns = [currentIconListView iconColumnsForCurrentOrientation];
+	}
+	if ([currentIconListView respondsToSelector:@selector(iconRowsForCurrentOrientation)]) {
+		rows = [currentIconListView iconRowsForCurrentOrientation];
+	}
+	if ([currentIconListView respondsToSelector:@selector(iconsInRowForSpacingCalculation)]) {
+		spacingColumns = [currentIconListView iconsInRowForSpacingCalculation];
+	}
+
+	NSString *key = [NSString stringWithFormat:@"pod-controller-%@-%@", phase, NSStringFromClass([folder class])];
+	ALELogOnce(key, @"Pod controller phase=%@ class=%@ view=%@ container=%@ podViewClass=%@ podFrame=%@ listClass=%@ listLocation=%@ listFrame=%@ listBounds=%@ modelClass=%@ folderClass=%@ columns=%llu rows=%llu spacingColumns=%llu",
+		phase,
+		NSStringFromClass([controller class]),
+		NSStringFromCGRect(controller.view.frame),
+		NSStringFromCGRect(containerView.frame),
+		NSStringFromClass([podFolderView class]),
+		NSStringFromCGRect(podFolderView.frame),
+		NSStringFromClass([currentIconListView class]),
+		currentIconListView.iconLocation,
+		NSStringFromCGRect(currentIconListView.frame),
+		NSStringFromCGRect(currentIconListView.bounds),
+		NSStringFromClass([model class]),
+		NSStringFromClass([folder class]),
+		columns,
+		rows,
+		spacingColumns
+	);
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
@@ -268,6 +369,15 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
 	ALEConfigureAppLibraryGrid(configuration);
+}
+- (id)makeLayoutForIconLocation:(id)iconLocation {
+	id layout = %orig;
+	ALELogOnce([NSString stringWithFormat:@"make-layout-%@", iconLocation], @"makeLayoutForIconLocation=%@ layoutClass=%@ provider=%@",
+		iconLocation,
+		NSStringFromClass([layout class]),
+		NSStringFromClass([self class])
+	);
+	return layout;
 }
 %end
 
@@ -392,9 +502,14 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBHLibraryPodFolderController
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	ALELogLibraryPodController(self, @"viewDidAppear");
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
+}
+- (void)viewDidLayoutSubviews {
+	%orig;
+	ALELogLibraryPodController(self, @"viewDidLayoutSubviews");
 }
 %end
 
