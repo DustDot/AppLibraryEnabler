@@ -79,7 +79,6 @@ struct SBHIconGridSize {
 @property (nonatomic, readonly) SBFolder *folder;
 @property (nonatomic, readonly) unsigned long long numberOfIcons;
 - (struct SBHIconGridSize)gridSize;
-- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize cellClusterSize:(struct SBHIconGridSize)cellClusterSize cellClusterReferenceGridSize:(struct SBHIconGridSize)cellClusterReferenceGridSize options:(unsigned long long)options;
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
 
@@ -261,9 +260,38 @@ static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGri
 	return gridSize;
 }
 
-static struct SBHIconGridSize ALELibraryCategoriesRootPodClusterSize(void) {
-	struct SBHIconGridSize clusterSize = { 2, 2 };
-	return clusterSize;
+static unsigned long long ALELibraryCategoriesRootPodColumnsForGridSize(struct SBHIconGridSize gridSize) {
+	return MAX((unsigned long long)1, (unsigned long long)gridSize.columns / 2);
+}
+
+static unsigned long long ALELibraryCategoriesRootGridCellIndexForIconIndex(NSUInteger iconIndex, struct SBHIconGridSize gridSize) {
+	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
+	unsigned long long row = iconIndex / podColumns;
+	unsigned long long column = iconIndex % podColumns;
+	return (row * 2 * gridSize.columns) + (column * 2);
+}
+
+static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *gridCellInfo, NSUInteger iconCount, struct SBHIconGridSize gridSize) {
+	if (!gridCellInfo || iconCount == 0 || gridSize.columns == 0) {
+		return;
+	}
+
+	gridCellInfo.gridSize = gridSize;
+	[gridCellInfo clearAllIconAndGridCellIndexes];
+
+	for (NSUInteger iconIndex = 0; iconIndex < iconCount; iconIndex++) {
+		unsigned long long gridCellIndex = ALELibraryCategoriesRootGridCellIndexForIconIndex(iconIndex, gridSize);
+		[gridCellInfo setGridCellIndex:gridCellIndex forIconIndex:iconIndex];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + 1];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + gridSize.columns];
+		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + gridSize.columns + 1];
+	}
+
+	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
+	unsigned long long podRows = ((unsigned long long)iconCount + podColumns - 1) / podColumns;
+	gridCellInfo.numberOfUsedColumns = MIN((unsigned long long)gridSize.columns, podColumns * 2);
+	gridCellInfo.numberOfUsedRows = MAX((unsigned long long)1, podRows * 2);
 }
 
 %hook SBIconController
@@ -336,24 +364,13 @@ static struct SBHIconGridSize ALELibraryCategoriesRootPodClusterSize(void) {
 	return gridSize;
 }
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
+	id gridCellInfo = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(gridSize);
-		struct SBHIconGridSize clusterSize = ALELibraryCategoriesRootPodClusterSize();
-		if ([self respondsToSelector:@selector(gridCellInfoForGridSize:cellClusterSize:cellClusterReferenceGridSize:options:)]) {
-			return [self gridCellInfoForGridSize:rootGridSize cellClusterSize:clusterSize cellClusterReferenceGridSize:rootGridSize options:options];
-		}
+		ALEReflowLibraryCategoriesRootGridCellInfo((SBIconListGridCellInfo *)gridCellInfo, self.numberOfIcons, rootGridSize);
 	}
 
-	return %orig;
-}
-- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize cellClusterSize:(struct SBHIconGridSize)cellClusterSize cellClusterReferenceGridSize:(struct SBHIconGridSize)cellClusterReferenceGridSize options:(unsigned long long)options {
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(gridSize);
-		struct SBHIconGridSize clusterSize = ALELibraryCategoriesRootPodClusterSize();
-		return %orig(rootGridSize, clusterSize, rootGridSize, options);
-	}
-
-	return %orig;
+	return gridCellInfo;
 }
 %end
 
