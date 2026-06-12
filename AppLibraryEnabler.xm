@@ -75,17 +75,11 @@ struct SBHIconGridSize {
 - (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
 @end
 
-@interface SBHLibraryCategory : NSObject
-- (SBHLibraryCategoryFolder *)expandedPodFolder;
-@end
-
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) SBFolder *folder;
 - (struct SBHIconGridSize)gridSize;
 @end
 
-static char ALEExpandedLibraryCategoryFolderKey;
-static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth;
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -237,28 +231,22 @@ static BOOL ALEIsLandscapeScreen(void) {
 	return screenSize.width > screenSize.height;
 }
 
-static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconGridSize originalGridSize) {
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
+static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGridSize originalGridSize) {
 	struct SBHIconGridSize gridSize = originalGridSize;
 
 	if (ALEIsLandscapeScreen()) {
-		gridSize.columns = MAX(gridSize.columns, 6);
+		gridSize.columns = MAX(gridSize.columns, 8);
 		gridSize.rows = MAX(gridSize.rows, 4);
 	} else {
-		gridSize.columns = MAX(gridSize.columns, 4);
-		gridSize.rows = MAX(gridSize.rows, 5);
+		gridSize.columns = MAX(gridSize.columns, 6);
+		gridSize.rows = MAX(gridSize.rows, 6);
 	}
 
 	return gridSize;
-}
-
-static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
-	return [objc_getAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey) boolValue];
-}
-
-static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
-	if (folder) {
-		objc_setAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	}
 }
 
 %hook SBIconController
@@ -310,40 +298,11 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 }
 %end
 
-%hook SBHLibraryCategory
-- (SBHLibraryCategoryFolder *)expandedPodFolder {
-	ALEBuildingExpandedLibraryCategoryFolderDepth++;
-	SBHLibraryCategoryFolder *folder = nil;
-	@try {
-		folder = %orig;
-	} @finally {
-		ALEBuildingExpandedLibraryCategoryFolderDepth--;
-	}
-	ALEMarkExpandedLibraryCategoryFolder(folder);
-	return folder;
-}
-%end
-
-%hook SBHLibraryCategoryFolder
-- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier {
-	BOOL buildingExpandedFolder = ALEBuildingExpandedLibraryCategoryFolderDepth > 0;
-	if (buildingExpandedFolder) {
-		listGridSize = ALEExpandedLibraryCategoryGridSize(listGridSize);
-	}
-
-	id folder = %orig(displayName, maxListCount, listGridSize, libraryCategoryIdentifier);
-	if (buildingExpandedFolder) {
-		ALEMarkExpandedLibraryCategoryFolder(folder);
-	}
-	return folder;
-}
-%end
-
 %hook SBFolder
 - (struct SBHIconGridSize)listGridSize {
 	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsExpandedLibraryCategoryFolder(self)) {
-		return ALEExpandedLibraryCategoryGridSize(gridSize);
+	if (ALEIsLibraryCategoriesRootFolder(self)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
 	}
 
 	return gridSize;
@@ -353,8 +312,8 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBIconListModel
 - (struct SBHIconGridSize)gridSize {
 	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
-		return ALEExpandedLibraryCategoryGridSize(gridSize);
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
 	}
 
 	return gridSize;
