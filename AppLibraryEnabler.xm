@@ -100,6 +100,7 @@ struct SBHIconGridSize {
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
+static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -315,14 +316,60 @@ static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
 	return ALEIsLibraryCategoriesRootFolder(model.folder);
 }
 
-static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
+static SBIconListView *ALELibraryCategoriesRootListViewInView(UIView *view) {
+	if ([view isKindOfClass:NSClassFromString(@"SBIconListView")] && ALEIsLibraryCategoriesRootListView((SBIconListView *)view)) {
+		return (SBIconListView *)view;
+	}
+
+	for (UIView *subview in view.subviews) {
+		SBIconListView *listView = ALELibraryCategoriesRootListViewInView(subview);
+		if (listView) {
+			return listView;
+		}
+	}
+
+	return nil;
+}
+
+static UIScrollView *ALEEnclosingScrollView(UIView *view) {
+	UIView *candidate = view.superview;
+	while (candidate) {
+		if ([candidate isKindOfClass:[UIScrollView class]]) {
+			return (UIScrollView *)candidate;
+		}
+		candidate = candidate.superview;
+	}
+
+	return nil;
+}
+
+static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
+	CGFloat minY = 0;
+	UIView *candidate = view;
+	while (candidate && candidate != ancestor) {
+		minY += CGRectGetMinY(candidate.frame);
+		candidate = candidate.superview;
+	}
+
+	return candidate == ancestor ? minY : 0;
+}
+
+static UIEdgeInsets ALEAdjustedContentInset(UIScrollView *scrollView) {
+	if ([scrollView respondsToSelector:@selector(adjustedContentInset)]) {
+		return scrollView.adjustedContentInset;
+	}
+
+	return scrollView.contentInset;
+}
+
+static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
-		return;
+		return 0;
 	}
 
 	NSArray *icons = listView.icons;
 	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
-		return;
+		return 0;
 	}
 
 	CGFloat listWidth = CGRectGetWidth(listView.bounds);
@@ -364,7 +411,7 @@ static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 	}
 
 	if (podWidth <= 0 || podHeight <= 0 || topY == CGFLOAT_MAX) {
-		return;
+		return 0;
 	}
 
 	CGFloat horizontalInset = landscape ? MAX((CGFloat)122.0, listWidth * 0.075) : MAX((CGFloat)72.0, listWidth * 0.085);
@@ -384,18 +431,61 @@ static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 		rowStep = podHeight + 36.0;
 	}
 
+	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
+	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
 		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
-		if (![iconView isKindOfClass:[UIView class]] || iconView.hidden) {
+		if (![iconView isKindOfClass:[UIView class]]) {
 			continue;
 		}
 
 		NSUInteger column = iconIndex % columnCount;
 		NSUInteger row = iconIndex / columnCount;
 		CGRect frame = iconView.frame;
+		if (CGRectGetWidth(frame) <= 0 || CGRectGetHeight(frame) <= 0) {
+			frame.size = CGSizeMake(podWidth, podHeight);
+		}
 		frame.origin.x = horizontalInset + ((podWidth + columnGap) * column);
 		frame.origin.y = topY + (rowStep * row);
 		iconView.frame = frame;
+		maxY = MAX(maxY, CGRectGetMaxY(frame));
+	}
+
+	return maxY;
+}
+
+static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, CGFloat contentBottom) {
+	if (!ALEIsLibraryCategoriesRootListView(listView) || contentBottom <= 0) {
+		return;
+	}
+
+	UIScrollView *scrollView = ALEEnclosingScrollView(listView);
+	if (!scrollView) {
+		return;
+	}
+
+	CGFloat bottomPadding = ALEIsLandscapeScreen() ? 28.0 : 32.0;
+	CGFloat listMinY = ALEViewMinYInAncestor(listView, scrollView);
+	CGFloat desiredHeight = MAX(listMinY + contentBottom + bottomPadding, CGRectGetHeight(scrollView.bounds) + 1.0);
+
+	CGSize contentSize = scrollView.contentSize;
+	if (fabs(contentSize.height - desiredHeight) > 1.0) {
+		contentSize.height = desiredHeight;
+		ALEUpdatingLibraryRootScrollRange = YES;
+		@try {
+			scrollView.contentSize = contentSize;
+		} @finally {
+			ALEUpdatingLibraryRootScrollRange = NO;
+		}
+	}
+
+	UIEdgeInsets adjustedInset = ALEAdjustedContentInset(scrollView);
+	CGFloat minimumOffsetY = -adjustedInset.top;
+	CGFloat maximumOffsetY = MAX(minimumOffsetY, contentSize.height - CGRectGetHeight(scrollView.bounds) + adjustedInset.bottom);
+	if (scrollView.contentOffset.y > maximumOffsetY) {
+		CGPoint contentOffset = scrollView.contentOffset;
+		contentOffset.y = maximumOffsetY;
+		scrollView.contentOffset = contentOffset;
 	}
 }
 
@@ -482,35 +572,60 @@ static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 %hook SBIconListView
 - (void)setFrame:(CGRect)frame {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)setBounds:(CGRect)bounds {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)layoutSubviews {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)layoutIconsIfNeeded {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)layoutIconsIfNeeded:(double)arg1 {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)layoutIconsIfNeededUsingAnimator:(id)arg1 options:(unsigned long long)arg2 {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)layoutIconsIfNeededWithAnimationType:(long long)arg1 options:(unsigned long long)arg2 {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
 }
 - (void)layoutIconsNow {
 	%orig;
-	ALELayoutLibraryCategoriesRootListView(self);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
+	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
+}
+%end
+
+%hook UIScrollView
+- (void)setContentSize:(CGSize)contentSize {
+	%orig;
+	if (ALEUpdatingLibraryRootScrollRange) {
+		return;
+	}
+
+	SBIconListView *listView = ALELibraryCategoriesRootListViewInView(self);
+	if (!listView) {
+		return;
+	}
+
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(listView);
+	ALEUpdateLibraryCategoriesRootScrollRange(listView, contentBottom);
 }
 %end
 
