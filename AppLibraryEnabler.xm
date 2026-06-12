@@ -395,7 +395,7 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 	ALELogOnce([NSString stringWithFormat:@"make-layout-%@", iconLocation], @"makeLayoutForIconLocation=%@ layoutClass=%@ provider=%@",
 		iconLocation,
 		NSStringFromClass([layout class]),
-		NSStringFromClass(object_getClass(self))
+		NSStringFromClass([self class])
 	);
 	return layout;
 }
