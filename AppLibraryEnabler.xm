@@ -50,6 +50,10 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+@interface SBHLibraryPodFolderController (AppLibraryEnabler)
++ (id)iconLocation;
+@end
+
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
 @property (nonatomic) unsigned long long numberOfPortraitColumns;
@@ -82,6 +86,7 @@ struct SBHIconGridSize {
 
 static char ALEExpandedLibraryCategoryFolderKey;
 static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth;
+static BOOL ALEConfiguringLibraryRootLayout = NO;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -140,6 +145,26 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
+static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
+	if (firstObject == secondObject) {
+		return YES;
+	}
+	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
+		return NO;
+	}
+
+	return [firstObject isEqual:secondObject];
+}
+
+static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
+	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
+	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
+		return NO;
+	}
+
+	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
+}
+
 static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
 	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
 		return;
@@ -175,7 +200,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 }
 
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL libraryRootLayout) {
 	if (!configuration) {
 		return;
 	}
@@ -185,10 +210,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat height = MIN(screenSize.width, screenSize.height);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = 4;
+		configuration.numberOfLandscapeColumns = libraryRootLayout ? 8 : 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = 3;
+		configuration.numberOfPortraitColumns = libraryRootLayout ? 6 : 3;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
@@ -267,7 +292,21 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 %hook SBHDefaultIconListLayoutProvider
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	ALEConfigureAppLibraryGrid(configuration);
+	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
+}
+- (id)makeLayoutForIconLocation:(id)iconLocation {
+	BOOL previousConfiguringLibraryRootLayout = ALEConfiguringLibraryRootLayout;
+	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryRootLayout = previousConfiguringLibraryRootLayout;
+	return layout;
+}
+- (id)layoutForIconLocation:(id)iconLocation {
+	BOOL previousConfiguringLibraryRootLayout = ALEConfiguringLibraryRootLayout;
+	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryRootLayout = previousConfiguringLibraryRootLayout;
+	return layout;
 }
 %end
 
