@@ -185,10 +185,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat height = MIN(screenSize.width, screenSize.height);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = 4;
+		configuration.numberOfLandscapeColumns = 8;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = 3;
+		configuration.numberOfPortraitColumns = 6;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
