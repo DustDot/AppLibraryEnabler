@@ -85,9 +85,12 @@ struct SBHIconGridSize {
 @interface SBIconListView : UIView
 @property (nonatomic, readonly) SBIconListModel *model;
 @property (nonatomic, readonly, copy) NSArray *icons;
+@property (nonatomic) NSRange visibleColumnRange;
+@property (nonatomic) NSRange visibleRowRange;
 - (id)iconViewForIcon:(id)icon;
 - (void)setFrame:(CGRect)frame;
 - (void)setBounds:(CGRect)bounds;
+- (void)showAllIcons;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -101,6 +104,10 @@ struct SBHIconGridSize {
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
+static BOOL ALEUpdatingLibraryRootVisibility = NO;
+static CGFloat ALELastLibraryRootListWidth = 0;
+static CGFloat ALELastLibraryRootContentMinX = 0;
+static CGFloat ALELastLibraryRootContentMaxX = 0;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -191,6 +198,39 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	}
 }
 
+static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]] || ALELastLibraryRootListWidth <= 0 || ALELastLibraryRootContentMaxX <= ALELastLibraryRootContentMinX) {
+		return;
+	}
+
+	id controller = [searchBar _viewControllerForAncestor];
+	if (controller && !ALEIsLibraryController(controller)) {
+		return;
+	}
+
+	UIView *searchSuperview = searchBar.superview;
+	CGFloat superviewWidth = CGRectGetWidth(searchSuperview.bounds);
+	if (superviewWidth <= 0) {
+		return;
+	}
+
+	CGFloat scale = superviewWidth / ALELastLibraryRootListWidth;
+	CGFloat left = ALELastLibraryRootContentMinX * scale;
+	CGFloat right = ALELastLibraryRootContentMaxX * scale;
+	if (right <= left || right > superviewWidth + 1.0) {
+		return;
+	}
+
+	CGRect searchFrame = searchBar.frame;
+	if (fabs(CGRectGetMinX(searchFrame) - left) <= 1.0 && fabs(CGRectGetWidth(searchFrame) - (right - left)) <= 1.0) {
+		return;
+	}
+
+	searchFrame.origin.x = left;
+	searchFrame.size.width = right - left;
+	searchBar.frame = searchFrame;
+}
+
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
 	if (!searchController.view) {
 		return;
@@ -205,6 +245,8 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[containerView setFrame:fullFrame];
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
+
+	ALELayoutLibrarySearchBar(searchBar);
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
@@ -354,12 +396,28 @@ static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
 	return candidate == ancestor ? minY : 0;
 }
 
-static UIEdgeInsets ALEAdjustedContentInset(UIScrollView *scrollView) {
-	if ([scrollView respondsToSelector:@selector(adjustedContentInset)]) {
-		return scrollView.adjustedContentInset;
+static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
+	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryCategoriesRootListView(listView) || columnCount == 0 || rowCount == 0) {
+		return;
 	}
 
-	return scrollView.contentInset;
+	ALEUpdatingLibraryRootVisibility = YES;
+	@try {
+		NSRange visibleColumnRange = NSMakeRange(0, columnCount * 2);
+		NSRange visibleRowRange = NSMakeRange(0, rowCount * 2);
+
+		if ([listView respondsToSelector:@selector(setVisibleColumnRange:)]) {
+			listView.visibleColumnRange = visibleColumnRange;
+		}
+		if ([listView respondsToSelector:@selector(setVisibleRowRange:)]) {
+			listView.visibleRowRange = visibleRowRange;
+		}
+		if ([listView respondsToSelector:@selector(showAllIcons)]) {
+			[listView showAllIcons];
+		}
+	} @finally {
+		ALEUpdatingLibraryRootVisibility = NO;
+	}
 }
 
 static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
@@ -433,6 +491,11 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
+	ALELastLibraryRootListWidth = listWidth;
+	ALELastLibraryRootContentMinX = horizontalInset;
+	ALELastLibraryRootContentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
+
+	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
 		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
 		if (![iconView isKindOfClass:[UIView class]]) {
@@ -448,6 +511,9 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		frame.origin.x = horizontalInset + ((podWidth + columnGap) * column);
 		frame.origin.y = topY + (rowStep * row);
 		iconView.frame = frame;
+		if (iconView.hidden) {
+			iconView.hidden = NO;
+		}
 		maxY = MAX(maxY, CGRectGetMaxY(frame));
 	}
 
@@ -477,15 +543,6 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 		} @finally {
 			ALEUpdatingLibraryRootScrollRange = NO;
 		}
-	}
-
-	UIEdgeInsets adjustedInset = ALEAdjustedContentInset(scrollView);
-	CGFloat minimumOffsetY = -adjustedInset.top;
-	CGFloat maximumOffsetY = MAX(minimumOffsetY, contentSize.height - CGRectGetHeight(scrollView.bounds) + adjustedInset.bottom);
-	if (scrollView.contentOffset.y > maximumOffsetY) {
-		CGPoint contentOffset = scrollView.contentOffset;
-		contentOffset.y = maximumOffsetY;
-		scrollView.contentOffset = contentOffset;
 	}
 }
 
@@ -657,6 +714,13 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (void)viewWillLayoutSubviews {
 	%orig;
 	ALEUpdateOverlayLayout(self);
+}
+%end
+
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
 }
 %end
 
