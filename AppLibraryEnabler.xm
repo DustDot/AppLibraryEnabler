@@ -56,7 +56,9 @@
 
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
+@property (nonatomic) unsigned long long numberOfLandscapeRows;
 @property (nonatomic) unsigned long long numberOfPortraitColumns;
+@property (nonatomic) unsigned long long numberOfPortraitRows;
 @property (nonatomic) CGSize listSizeForIconSpacingCalculation;
 @property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
@@ -80,6 +82,15 @@ struct SBHIconGridSize {
 @property (nonatomic, readonly) unsigned long long numberOfIcons;
 - (struct SBHIconGridSize)gridSize;
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
+@end
+
+@interface SBIconListView : UIView
+@property (nonatomic, readonly) SBIconListModel *model;
+- (struct SBHIconGridSize)gridSizeForCurrentOrientation;
+- (unsigned long long)iconColumnsForCurrentOrientation;
+- (unsigned long long)iconRowsForCurrentOrientation;
+- (unsigned long long)iconsInRowForSpacingCalculation;
+- (unsigned long long)iconRowsForSpacingCalculation;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -217,8 +228,14 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = libraryRootLayout ? 8 : 4;
 	}
+	if (libraryRootLayout && [configuration respondsToSelector:@selector(setNumberOfLandscapeRows:)]) {
+		configuration.numberOfLandscapeRows = 4;
+	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
 		configuration.numberOfPortraitColumns = libraryRootLayout ? 6 : 3;
+	}
+	if (libraryRootLayout && [configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
+		configuration.numberOfPortraitRows = 6;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
@@ -264,6 +281,16 @@ static unsigned long long ALELibraryCategoriesRootPodColumnsForGridSize(struct S
 	return MAX((unsigned long long)1, (unsigned long long)gridSize.columns / 2);
 }
 
+static unsigned long long ALELibraryCategoriesRootUsedRowsForIconCount(NSUInteger iconCount, struct SBHIconGridSize gridSize) {
+	if (iconCount == 0) {
+		return 0;
+	}
+
+	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
+	unsigned long long podRows = ((unsigned long long)iconCount + podColumns - 1) / podColumns;
+	return MAX((unsigned long long)1, podRows * 2);
+}
+
 static unsigned long long ALELibraryCategoriesRootGridCellIndexForIconIndex(NSUInteger iconIndex, struct SBHIconGridSize gridSize) {
 	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
 	unsigned long long row = iconIndex / podColumns;
@@ -289,9 +316,21 @@ static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *g
 	}
 
 	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
-	unsigned long long podRows = ((unsigned long long)iconCount + podColumns - 1) / podColumns;
 	gridCellInfo.numberOfUsedColumns = MIN((unsigned long long)gridSize.columns, podColumns * 2);
-	gridCellInfo.numberOfUsedRows = MAX((unsigned long long)1, podRows * 2);
+	gridCellInfo.numberOfUsedRows = ALELibraryCategoriesRootUsedRowsForIconCount(iconCount, gridSize);
+}
+
+static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
+	if (!listView || ![listView respondsToSelector:@selector(model)]) {
+		return NO;
+	}
+
+	SBIconListModel *model = listView.model;
+	if (!model || ![model respondsToSelector:@selector(folder)]) {
+		return NO;
+	}
+
+	return ALEIsLibraryCategoriesRootFolder(model.folder);
 }
 
 %hook SBIconController
@@ -371,6 +410,71 @@ static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *g
 	}
 
 	return gridCellInfo;
+}
+- (unsigned long long)numberOfUsedColumns {
+	unsigned long long usedColumns = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(self.gridSize);
+		return MAX(usedColumns, (unsigned long long)rootGridSize.columns);
+	}
+
+	return usedColumns;
+}
+- (unsigned long long)numberOfUsedRows {
+	unsigned long long usedRows = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(self.gridSize);
+		return MAX(usedRows, ALELibraryCategoriesRootUsedRowsForIconCount(self.numberOfIcons, rootGridSize));
+	}
+
+	return usedRows;
+}
+%end
+
+%hook SBIconListView
+- (struct SBHIconGridSize)gridSizeForCurrentOrientation {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		return ALELibraryCategoriesRootGridSize(gridSize);
+	}
+
+	return gridSize;
+}
+- (unsigned long long)iconColumnsForCurrentOrientation {
+	unsigned long long columns = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		struct SBHIconGridSize gridSize = { (unsigned short)columns, 0 };
+		return ALELibraryCategoriesRootGridSize(gridSize).columns;
+	}
+
+	return columns;
+}
+- (unsigned long long)iconRowsForCurrentOrientation {
+	unsigned long long rows = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		struct SBHIconGridSize gridSize = { 0, (unsigned short)rows };
+		return ALELibraryCategoriesRootGridSize(gridSize).rows;
+	}
+
+	return rows;
+}
+- (unsigned long long)iconsInRowForSpacingCalculation {
+	unsigned long long iconsInRow = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		struct SBHIconGridSize gridSize = { (unsigned short)iconsInRow, 0 };
+		return ALELibraryCategoriesRootGridSize(gridSize).columns;
+	}
+
+	return iconsInRow;
+}
+- (unsigned long long)iconRowsForSpacingCalculation {
+	unsigned long long rows = %orig;
+	if (ALEIsLibraryCategoriesRootListView(self)) {
+		struct SBHIconGridSize gridSize = { 0, (unsigned short)rows };
+		return ALELibraryCategoriesRootGridSize(gridSize).rows;
+	}
+
+	return rows;
 }
 %end
 
