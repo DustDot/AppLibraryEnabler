@@ -84,9 +84,8 @@ struct SBHIconGridSize {
 
 @interface SBIconListView : UIView
 @property (nonatomic, readonly) SBIconListModel *model;
-- (struct SBHIconGridSize)gridSizeForCurrentOrientation;
-- (unsigned long long)iconColumnsForCurrentOrientation;
-- (unsigned long long)iconsInRowForSpacingCalculation;
+@property (nonatomic, readonly, copy) NSArray *icons;
+- (id)iconViewForIcon:(id)icon;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -314,6 +313,90 @@ static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
 	return ALEIsLibraryCategoriesRootFolder(model.folder);
 }
 
+static void ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
+	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
+		return;
+	}
+
+	NSArray *icons = listView.icons;
+	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
+		return;
+	}
+
+	CGFloat listWidth = CGRectGetWidth(listView.bounds);
+	if (listWidth <= 0) {
+		listWidth = CGRectGetWidth(listView.superview.bounds);
+	}
+	if (listWidth <= 0) {
+		listWidth = ALEFullWidthForView(listView);
+	}
+
+	BOOL landscape = ALEIsLandscapeScreen();
+	NSUInteger columnCount = landscape ? 4 : 3;
+	CGFloat topY = CGFLOAT_MAX;
+	CGFloat secondY = CGFLOAT_MAX;
+	CGFloat podWidth = 0;
+	CGFloat podHeight = 0;
+
+	for (id icon in icons) {
+		UIView *iconView = [listView iconViewForIcon:icon];
+		if (![iconView isKindOfClass:[UIView class]] || iconView.hidden) {
+			continue;
+		}
+
+		CGRect frame = iconView.frame;
+		if (CGRectGetWidth(frame) <= 0 || CGRectGetHeight(frame) <= 0) {
+			continue;
+		}
+
+		podWidth = MAX(podWidth, CGRectGetWidth(frame));
+		podHeight = MAX(podHeight, CGRectGetHeight(frame));
+
+		CGFloat y = CGRectGetMinY(frame);
+		if (y < topY - 1.0) {
+			secondY = topY;
+			topY = y;
+		} else if (y > topY + 8.0 && y < secondY - 1.0) {
+			secondY = y;
+		}
+	}
+
+	if (podWidth <= 0 || podHeight <= 0 || topY == CGFLOAT_MAX) {
+		return;
+	}
+
+	CGFloat horizontalInset = landscape ? MAX((CGFloat)96.0, listWidth * 0.065) : MAX((CGFloat)56.0, listWidth * 0.075);
+	CGFloat availableWidth = listWidth - (horizontalInset * 2.0);
+	if (availableWidth < (podWidth * columnCount)) {
+		horizontalInset = 24.0;
+		availableWidth = listWidth - (horizontalInset * 2.0);
+	}
+
+	CGFloat columnGap = columnCount > 1 ? (availableWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
+	if (columnGap < 12.0) {
+		columnGap = 12.0;
+	}
+
+	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
+	if (rowStep <= 0) {
+		rowStep = podHeight + 44.0;
+	}
+
+	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
+		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
+		if (![iconView isKindOfClass:[UIView class]] || iconView.hidden) {
+			continue;
+		}
+
+		NSUInteger column = iconIndex % columnCount;
+		NSUInteger row = iconIndex / columnCount;
+		CGRect frame = iconView.frame;
+		frame.origin.x = horizontalInset + ((podWidth + columnGap) * column);
+		frame.origin.y = topY + (rowStep * row);
+		iconView.frame = frame;
+	}
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -395,31 +478,13 @@ static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
 %end
 
 %hook SBIconListView
-- (struct SBHIconGridSize)gridSizeForCurrentOrientation {
-	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		return ALELibraryCategoriesRootGridSize(gridSize);
-	}
-
-	return gridSize;
+- (void)layoutSubviews {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
 }
-- (unsigned long long)iconColumnsForCurrentOrientation {
-	unsigned long long columns = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		struct SBHIconGridSize gridSize = { (unsigned short)columns, 0 };
-		return ALELibraryCategoriesRootGridSize(gridSize).columns;
-	}
-
-	return columns;
-}
-- (unsigned long long)iconsInRowForSpacingCalculation {
-	unsigned long long iconsInRow = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		struct SBHIconGridSize gridSize = { (unsigned short)iconsInRow, 0 };
-		return ALELibraryCategoriesRootGridSize(gridSize).columns;
-	}
-
-	return iconsInRow;
+- (void)layoutIconsNow {
+	%orig;
+	ALELayoutLibraryCategoriesRootListView(self);
 }
 %end
 
