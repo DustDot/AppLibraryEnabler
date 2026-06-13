@@ -103,8 +103,7 @@ static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
 static BOOL ALEHasLibrarySearchHorizontalRange = NO;
-static CGFloat ALELibrarySearchMinXRatio = 0;
-static CGFloat ALELibrarySearchMaxXRatio = 1;
+static CGFloat ALELibrarySearchTargetWidth = 0;
 
 static BOOL ALEIsLandscapeScreen(void);
 
@@ -212,13 +211,12 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (!ALEHasLibrarySearchHorizontalRange || ALELibrarySearchMaxXRatio <= ALELibrarySearchMinXRatio) {
+	if (!ALEHasLibrarySearchHorizontalRange || ALELibrarySearchTargetWidth <= 0) {
 		return;
 	}
 
-	CGFloat left = round(superviewWidth * ALELibrarySearchMinXRatio);
-	CGFloat right = round(superviewWidth * ALELibrarySearchMaxXRatio);
-	CGFloat width = right - left;
+	CGFloat width = MIN(superviewWidth, round(ALELibrarySearchTargetWidth));
+	CGFloat left = round((superviewWidth - width) * 0.5);
 	if (width <= 0) {
 		return;
 	}
@@ -441,26 +439,6 @@ static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView,
 	}
 }
 
-static CGRect ALELargestSubviewFrameInView(UIView *view, UIView *container) {
-	CGRect largestFrame = CGRectZero;
-	CGFloat largestArea = 0;
-
-	for (UIView *subview in view.subviews) {
-		if (subview.hidden || subview.alpha <= 0.01) {
-			continue;
-		}
-
-		CGRect frame = [container convertRect:subview.bounds fromView:subview];
-		CGFloat area = CGRectGetWidth(frame) * CGRectGetHeight(frame);
-		if (area > largestArea) {
-			largestArea = area;
-			largestFrame = frame;
-		}
-	}
-
-	return largestFrame;
-}
-
 static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
 		return 0;
@@ -554,18 +532,13 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		if (iconView.hidden) {
 			iconView.hidden = NO;
 		}
-		CGRect visualFrame = ALELargestSubviewFrameInView(iconView, listView);
-		if (CGRectIsEmpty(visualFrame) || CGRectGetWidth(visualFrame) < CGRectGetWidth(frame) * 0.5) {
-			visualFrame = frame;
-		}
-		searchMinX = MIN(searchMinX, CGRectGetMinX(visualFrame));
-		searchMaxX = MAX(searchMaxX, CGRectGetMaxX(visualFrame));
+		searchMinX = MIN(searchMinX, CGRectGetMinX(frame));
+		searchMaxX = MAX(searchMaxX, CGRectGetMaxX(frame));
 		maxY = MAX(maxY, CGRectGetMaxY(frame));
 	}
 
 	if (searchMinX != CGFLOAT_MAX && searchMaxX > searchMinX && listWidth > 0) {
-		ALELibrarySearchMinXRatio = searchMinX / listWidth;
-		ALELibrarySearchMaxXRatio = searchMaxX / listWidth;
+		ALELibrarySearchTargetWidth = searchMaxX - searchMinX;
 		ALEHasLibrarySearchHorizontalRange = YES;
 		if (listView.window) {
 			ALELayoutLibrarySearchBarsInView(listView.window);
@@ -759,6 +732,11 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
 	ALEUpdateOverlayLayout(self);
+	if (self.view.window) {
+		ALELayoutLibrarySearchBarsInView(self.view.window);
+	} else {
+		ALELayoutLibrarySearchBarsInView(self.view);
+	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
 }
@@ -790,6 +768,14 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	ALELayoutLibrarySearchBar(self);
 }
 - (void)didMoveToWindow {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)setCenter:(CGPoint)center {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)setTransform:(CGAffineTransform)transform {
 	%orig;
 	ALELayoutLibrarySearchBar(self);
 }
