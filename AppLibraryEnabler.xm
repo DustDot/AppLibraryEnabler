@@ -228,9 +228,12 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 
 	ALEUpdatingLibrarySearchBarFrame = YES;
 	@try {
-		searchFrame.origin.x = left;
-		searchFrame.size.width = width;
-		searchBar.frame = searchFrame;
+		[UIView performWithoutAnimation:^{
+			searchFrame.origin.x = left;
+			searchFrame.size.width = width;
+			searchBar.frame = searchFrame;
+			[searchBar layoutIfNeeded];
+		}];
 	} @finally {
 		ALEUpdatingLibrarySearchBarFrame = NO;
 	}
@@ -511,9 +514,17 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 
+	CGFloat visualOutset = MIN(columnGap * 0.25, MAX((CGFloat)0, horizontalInset));
+	CGFloat calculatedSearchWidth = (podWidth * columnCount) + (columnGap * (CGFloat)MAX((NSInteger)columnCount - 1, 0)) + (visualOutset * 2.0);
+	if (calculatedSearchWidth > 0) {
+		ALELibrarySearchTargetWidth = MIN(listWidth, calculatedSearchWidth);
+		ALEHasLibrarySearchHorizontalRange = YES;
+		if (listView.window) {
+			ALELayoutLibrarySearchBarsInView(listView.window);
+		}
+	}
+
 	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
-	CGFloat searchMinX = CGFLOAT_MAX;
-	CGFloat searchMaxX = 0;
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
 		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
 		if (![iconView isKindOfClass:[UIView class]]) {
@@ -532,17 +543,7 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		if (iconView.hidden) {
 			iconView.hidden = NO;
 		}
-		searchMinX = MIN(searchMinX, CGRectGetMinX(frame));
-		searchMaxX = MAX(searchMaxX, CGRectGetMaxX(frame));
 		maxY = MAX(maxY, CGRectGetMaxY(frame));
-	}
-
-	if (searchMinX != CGFLOAT_MAX && searchMaxX > searchMinX && listWidth > 0) {
-		ALELibrarySearchTargetWidth = searchMaxX - searchMinX;
-		ALEHasLibrarySearchHorizontalRange = YES;
-		if (listView.window) {
-			ALELayoutLibrarySearchBarsInView(listView.window);
-		}
 	}
 
 	return maxY;
