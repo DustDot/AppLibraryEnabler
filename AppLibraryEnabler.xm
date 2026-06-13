@@ -228,12 +228,16 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 
 	ALEUpdatingLibrarySearchBarFrame = YES;
 	@try {
-		[UIView performWithoutAnimation:^{
+		BOOL animationsEnabled = [UIView areAnimationsEnabled];
+		[UIView setAnimationsEnabled:NO];
+		@try {
 			searchFrame.origin.x = left;
 			searchFrame.size.width = width;
 			searchBar.frame = searchFrame;
 			[searchBar layoutIfNeeded];
-		}];
+		} @finally {
+			[UIView setAnimationsEnabled:animationsEnabled];
+		}
 	} @finally {
 		ALEUpdatingLibrarySearchBarFrame = NO;
 	}
