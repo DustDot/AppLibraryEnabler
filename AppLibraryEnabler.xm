@@ -441,6 +441,26 @@ static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView,
 	}
 }
 
+static CGRect ALELargestSubviewFrameInView(UIView *view, UIView *container) {
+	CGRect largestFrame = CGRectZero;
+	CGFloat largestArea = 0;
+
+	for (UIView *subview in view.subviews) {
+		if (subview.hidden || subview.alpha <= 0.01) {
+			continue;
+		}
+
+		CGRect frame = [container convertRect:subview.bounds fromView:subview];
+		CGFloat area = CGRectGetWidth(frame) * CGRectGetHeight(frame);
+		if (area > largestArea) {
+			largestArea = area;
+			largestFrame = frame;
+		}
+	}
+
+	return largestFrame;
+}
+
 static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
 	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
 		return 0;
@@ -513,21 +533,9 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 
-	CGFloat laidOutContentMinX = horizontalInset;
-	CGFloat laidOutContentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
-	CGFloat horizontalOutset = MAX((CGFloat)0, MIN(columnGap * 0.5, horizontalInset));
-	CGFloat searchMinX = MAX((CGFloat)0, laidOutContentMinX - horizontalOutset);
-	CGFloat searchMaxX = MIN(listWidth, laidOutContentMaxX + horizontalOutset);
-	if (searchMaxX > searchMinX && listWidth > 0) {
-		ALELibrarySearchMinXRatio = searchMinX / listWidth;
-		ALELibrarySearchMaxXRatio = searchMaxX / listWidth;
-		ALEHasLibrarySearchHorizontalRange = YES;
-		if (listView.window) {
-			ALELayoutLibrarySearchBarsInView(listView.window);
-		}
-	}
-
 	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
+	CGFloat searchMinX = CGFLOAT_MAX;
+	CGFloat searchMaxX = 0;
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
 		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
 		if (![iconView isKindOfClass:[UIView class]]) {
@@ -546,7 +554,22 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		if (iconView.hidden) {
 			iconView.hidden = NO;
 		}
+		CGRect visualFrame = ALELargestSubviewFrameInView(iconView, listView);
+		if (CGRectIsEmpty(visualFrame) || CGRectGetWidth(visualFrame) < CGRectGetWidth(frame) * 0.5) {
+			visualFrame = frame;
+		}
+		searchMinX = MIN(searchMinX, CGRectGetMinX(visualFrame));
+		searchMaxX = MAX(searchMaxX, CGRectGetMaxX(visualFrame));
 		maxY = MAX(maxY, CGRectGetMaxY(frame));
+	}
+
+	if (searchMinX != CGFLOAT_MAX && searchMaxX > searchMinX && listWidth > 0) {
+		ALELibrarySearchMinXRatio = searchMinX / listWidth;
+		ALELibrarySearchMaxXRatio = searchMaxX / listWidth;
+		ALEHasLibrarySearchHorizontalRange = YES;
+		if (listView.window) {
+			ALELayoutLibrarySearchBarsInView(listView.window);
+		}
 	}
 
 	return maxY;
@@ -809,8 +832,29 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibraryPodFolderController
+- (void)viewWillAppear:(bool)arg1 {
+	%orig;
+	if (self.view.window) {
+		ALELayoutLibrarySearchBarsInView(self.view.window);
+	}
+}
+- (void)viewWillLayoutSubviews {
+	%orig;
+	if (self.view.window) {
+		ALELayoutLibrarySearchBarsInView(self.view.window);
+	}
+}
+- (void)viewDidLayoutSubviews {
+	%orig;
+	if (self.view.window) {
+		ALELayoutLibrarySearchBarsInView(self.view.window);
+	}
+}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	if (self.view.window) {
+		ALELayoutLibrarySearchBarsInView(self.view.window);
+	}
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
