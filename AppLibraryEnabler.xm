@@ -103,7 +103,6 @@ static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEHasLibrarySearchHorizontalRange = NO;
 static CGFloat ALELibrarySearchLayoutWidth = 0;
-static CGFloat ALELibrarySearchLeft = 0;
 static CGFloat ALELibrarySearchWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
 
@@ -217,17 +216,14 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 
 	if (ALEHasLibrarySearchHorizontalRange && ALELibrarySearchLayoutWidth > 0 && ALELibrarySearchWidth > 0 && [searchBar isKindOfClass:[UIView class]]) {
 		CGFloat scale = CGRectGetWidth(searchController.view.bounds) / ALELibrarySearchLayoutWidth;
-		CGFloat targetLeft = round(ALELibrarySearchLeft * scale);
 		CGFloat targetWidth = round(ALELibrarySearchWidth * scale);
 		CGRect targetFrame = searchBar.frame;
-		targetFrame.origin.x = targetLeft;
 		targetFrame.size.width = targetWidth;
 		if (CGRectGetHeight(targetFrame) <= 0) {
 			targetFrame.size.height = CGRectGetHeight(searchBar.bounds);
 		}
 		BOOL animationsEnabled = [UIView areAnimationsEnabled];
 		[UIView setAnimationsEnabled:NO];
-		searchBar.autoresizingMask = searchBar.autoresizingMask & ~UIViewAutoresizingFlexibleWidth;
 		searchBar.frame = targetFrame;
 		[UIView setAnimationsEnabled:animationsEnabled];
 	}
@@ -479,8 +475,7 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	CGFloat calculatedSearchWidth = (podWidth * columnCount) + (columnGap * (CGFloat)MAX((NSInteger)columnCount - 1, 0));
 	if (calculatedSearchWidth > 0 && listWidth > 0) {
 		ALELibrarySearchLayoutWidth = listWidth;
-		ALELibrarySearchLeft = horizontalInset;
-		ALELibrarySearchWidth = MIN(listWidth - horizontalInset, calculatedSearchWidth);
+		ALELibrarySearchWidth = MIN(listWidth, calculatedSearchWidth);
 		ALEHasLibrarySearchHorizontalRange = YES;
 		ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
 	}
