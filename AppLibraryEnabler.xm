@@ -176,26 +176,10 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
-static BOOL ALEViewIsInLibrarySearchController(UIView *view) {
-	for (UIView *candidate = view; candidate; candidate = candidate.superview) {
-		if (![candidate respondsToSelector:@selector(_viewControllerForAncestor)]) {
-			continue;
-		}
-
-		id viewController = [candidate _viewControllerForAncestor];
-		if (ALEObjectIsKindOfClassNamed(viewController, @"SBHLibrarySearchController")) {
-			return YES;
-		}
-	}
-
-	return NO;
-}
-
 static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
-	if (ALEUpdatingLibrarySearchBarFrame || !ALELibrarySearchControllerAppeared || ![searchBar isKindOfClass:[UIView class]] || !ALEViewIsInLibrarySearchController(searchBar)) {
+	if (ALEUpdatingLibrarySearchBarFrame || !ALELibrarySearchControllerAppeared || ![searchBar isKindOfClass:[UIView class]] || searchBar != ALELastLibrarySearchBar) {
 		return;
 	}
-	ALELastLibrarySearchBar = searchBar;
 	BOOL landscape = ALEIsLandscapeScreen();
 	if (ALELockedLibrarySearchBar == searchBar && ALELockedLibrarySearchBarWindow == searchBar.window && ALELockedLibrarySearchBarLandscape == landscape) {
 		return;
@@ -262,6 +246,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		ALELastLibrarySearchBar = searchBar;
+	}
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
 	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
@@ -837,6 +824,8 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
 	ALELibrarySearchControllerAppeared = NO;
+	ALELockedLibrarySearchBar = nil;
+	ALELockedLibrarySearchBarWindow = nil;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewDidAppear:(bool)arg1 {
