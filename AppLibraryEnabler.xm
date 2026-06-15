@@ -88,11 +88,9 @@ struct SBHIconGridSize {
 @property (nonatomic) NSRange visibleColumnRange;
 @property (nonatomic) NSRange visibleRowRange;
 - (id)iconViewForIcon:(id)icon;
-- (id)displayedIconViewForIcon:(id)icon;
 - (void)setFrame:(CGRect)frame;
 - (void)setBounds:(CGRect)bounds;
 - (void)showAllIcons;
-- (void)layoutAndCreateIcon:(id)icon atIndex:(unsigned long long)index;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -107,7 +105,6 @@ struct SBHIconGridSize {
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
-static BOOL ALECreatingLibraryRootIconViews = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
@@ -364,31 +361,6 @@ static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
 	return candidate == ancestor ? minY : 0;
 }
 
-static void ALECreateMissingLibraryRootIconViews(SBIconListView *listView, NSArray *icons) {
-	if (ALECreatingLibraryRootIconViews || ![listView respondsToSelector:@selector(layoutAndCreateIcon:atIndex:)]) {
-		return;
-	}
-
-	BOOL createdIconView = NO;
-	ALECreatingLibraryRootIconViews = YES;
-	@try {
-		for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
-			id icon = icons[iconIndex];
-			UIView *iconView = [listView respondsToSelector:@selector(displayedIconViewForIcon:)] ? [listView displayedIconViewForIcon:icon] : [listView iconViewForIcon:icon];
-			if (![iconView isKindOfClass:[UIView class]]) {
-				[listView layoutAndCreateIcon:icon atIndex:iconIndex];
-				createdIconView = YES;
-			}
-		}
-	} @finally {
-		ALECreatingLibraryRootIconViews = NO;
-	}
-
-	if (createdIconView && [listView respondsToSelector:@selector(showAllIcons)]) {
-		[listView showAllIcons];
-	}
-}
-
 static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
 	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryCategoriesRootListView(listView) || columnCount == 0 || rowCount == 0) {
 		return;
@@ -404,9 +376,7 @@ static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView,
 
 		NSRange visibleColumnRange = NSMakeRange(0, columnCount * 2);
 		NSRange visibleRowRange = NSMakeRange(0, rowCount * 2);
-		NSRange currentColumnRange = [listView respondsToSelector:@selector(visibleColumnRange)] ? listView.visibleColumnRange : ALELastLibraryRootVisibleColumnRange;
-		NSRange currentRowRange = [listView respondsToSelector:@selector(visibleRowRange)] ? listView.visibleRowRange : ALELastLibraryRootVisibleRowRange;
-		BOOL visibilityChanged = !NSEqualRanges(currentColumnRange, visibleColumnRange) || !NSEqualRanges(currentRowRange, visibleRowRange);
+		BOOL visibilityChanged = !NSEqualRanges(ALELastLibraryRootVisibleColumnRange, visibleColumnRange) || !NSEqualRanges(ALELastLibraryRootVisibleRowRange, visibleRowRange);
 
 		if (!visibilityChanged) {
 			return;
@@ -448,10 +418,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	BOOL landscape = ALEIsLandscapeScreen();
 	NSUInteger columnCount = landscape ? 4 : 3;
-	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
-	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
-	ALECreateMissingLibraryRootIconViews(listView, icons);
-
 	CGFloat topY = CGFLOAT_MAX;
 	CGFloat secondY = CGFLOAT_MAX;
 	CGFloat podWidth = 0;
@@ -501,8 +467,10 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		rowStep = podHeight + 36.0;
 	}
 
+	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 
+	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
 		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
 		if (![iconView isKindOfClass:[UIView class]]) {
@@ -517,9 +485,7 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		}
 		frame.origin.x = horizontalInset + ((podWidth + columnGap) * column);
 		frame.origin.y = topY + (rowStep * row);
-		if (fabs(CGRectGetMinX(iconView.frame) - CGRectGetMinX(frame)) > 0.5 || fabs(CGRectGetMinY(iconView.frame) - CGRectGetMinY(frame)) > 0.5 || fabs(CGRectGetWidth(iconView.frame) - CGRectGetWidth(frame)) > 0.5 || fabs(CGRectGetHeight(iconView.frame) - CGRectGetHeight(frame)) > 0.5) {
-			iconView.frame = frame;
-		}
+		iconView.frame = frame;
 		if (iconView.hidden) {
 			iconView.hidden = NO;
 		}
@@ -527,22 +493,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	}
 
 	return maxY;
-}
-
-static CGFloat ALELibraryCategoriesRootContentBottom(SBIconListView *listView) {
-	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
-		return 0;
-	}
-
-	CGFloat contentBottom = 0;
-	for (id icon in listView.icons) {
-		UIView *iconView = [listView iconViewForIcon:icon];
-		if ([iconView isKindOfClass:[UIView class]] && !iconView.hidden) {
-			contentBottom = MAX(contentBottom, CGRectGetMaxY(iconView.frame));
-		}
-	}
-
-	return contentBottom;
 }
 
 static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, CGFloat contentBottom) {
@@ -706,7 +656,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 		return;
 	}
 
-	CGFloat contentBottom = ALELibraryCategoriesRootContentBottom(listView);
+	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(listView);
 	ALEUpdateLibraryCategoriesRootScrollRange(listView, contentBottom);
 }
 %end
