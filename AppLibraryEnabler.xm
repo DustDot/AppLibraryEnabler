@@ -109,7 +109,7 @@ static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
-static CGRect ALELastLibraryRootGridFrameInWindow = CGRectZero;
+static CGRect ALELastLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
 static UIWindow *ALELastLibraryRootGridWindow = nil;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 
@@ -199,7 +199,7 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	frame.origin.x = CGRectGetMinX(targetFrame);
 	frame.size.width = CGRectGetWidth(targetFrame);
 
-	if (CGRectGetWidth(frame) <= 0 || fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5) {
+	if (CGRectGetWidth(frame) <= 0 || (fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5)) {
 		return;
 	}
 
