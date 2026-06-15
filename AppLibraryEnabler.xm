@@ -115,6 +115,8 @@ static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGFloat ALELastLibraryRootGridScreenMinX = 0;
 static CGFloat ALELastLibraryRootGridScreenMaxX = 0;
+static CGFloat ALELockedLibrarySearchBarScreenMinX = 0;
+static CGFloat ALELockedLibrarySearchBarScreenMaxX = 0;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static SBHSearchBar *ALELockedLibrarySearchBar = nil;
 static UIWindow *ALELockedLibrarySearchBarWindow = nil;
@@ -185,12 +187,24 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 	BOOL landscape = ALEIsLandscapeScreen();
-	if (!searchBar.superview || !searchBar.window || ALELastLibraryRootGridScreenMaxX <= ALELastLibraryRootGridScreenMinX) {
+	if (!searchBar.superview || !searchBar.window) {
 		return;
 	}
 
-	CGPoint leftPoint = [searchBar.superview convertPoint:CGPointMake(ALELastLibraryRootGridScreenMinX, 0) fromView:nil];
-	CGPoint rightPoint = [searchBar.superview convertPoint:CGPointMake(ALELastLibraryRootGridScreenMaxX, 0) fromView:nil];
+	if (ALELockedLibrarySearchBar != searchBar || ALELockedLibrarySearchBarWindow != searchBar.window || ALELockedLibrarySearchBarLandscape != landscape) {
+		if (ALELastLibraryRootGridScreenMaxX <= ALELastLibraryRootGridScreenMinX) {
+			return;
+		}
+
+		ALELockedLibrarySearchBar = searchBar;
+		ALELockedLibrarySearchBarWindow = searchBar.window;
+		ALELockedLibrarySearchBarLandscape = landscape;
+		ALELockedLibrarySearchBarScreenMinX = ALELastLibraryRootGridScreenMinX;
+		ALELockedLibrarySearchBarScreenMaxX = ALELastLibraryRootGridScreenMaxX;
+	}
+
+	CGPoint leftPoint = [searchBar.superview convertPoint:CGPointMake(ALELockedLibrarySearchBarScreenMinX, 0) fromView:nil];
+	CGPoint rightPoint = [searchBar.superview convertPoint:CGPointMake(ALELockedLibrarySearchBarScreenMaxX, 0) fromView:nil];
 	CGRect frame = searchBar.frame;
 	frame.origin.x = leftPoint.x;
 	frame.size.width = rightPoint.x - leftPoint.x;
@@ -203,9 +217,6 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	ALEUpdatingLibrarySearchBarFrame = YES;
 	@try {
 		searchBar.frame = frame;
-		ALELockedLibrarySearchBar = searchBar;
-		ALELockedLibrarySearchBarWindow = searchBar.window;
-		ALELockedLibrarySearchBarLandscape = landscape;
 	} @finally {
 		ALEUpdatingLibrarySearchBarFrame = NO;
 	}
@@ -774,6 +785,21 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 %end
 
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)setBounds:(CGRect)bounds {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)layoutSubviews {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+%end
+
 %hook SBHomeScreenOverlayViewController
 - (CGFloat)contentWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
@@ -826,6 +852,8 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	ALELibrarySearchControllerAppeared = NO;
 	ALELockedLibrarySearchBar = nil;
 	ALELockedLibrarySearchBarWindow = nil;
+	ALELockedLibrarySearchBarScreenMinX = 0;
+	ALELockedLibrarySearchBarScreenMaxX = 0;
 	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewDidAppear:(bool)arg1 {
