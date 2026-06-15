@@ -112,10 +112,6 @@ static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGRect ALELastLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
 static UIWindow *ALELastLibraryRootGridWindow = nil;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
-static SBHSearchBar *ALELockedLibrarySearchBar = nil;
-static UIWindow *ALELockedLibrarySearchBarWindow = nil;
-static BOOL ALELockedLibrarySearchBarLandscape = NO;
-static BOOL ALELibrarySearchControllerAppeared = NO;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -190,14 +186,10 @@ static BOOL ALEViewIsInLibrarySearchController(UIView *view) {
 }
 
 static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
-	if (ALEUpdatingLibrarySearchBarFrame || !ALELibrarySearchControllerAppeared || ![searchBar isKindOfClass:[UIView class]] || !ALEViewIsInLibrarySearchController(searchBar)) {
+	if (ALEUpdatingLibrarySearchBarFrame || ![searchBar isKindOfClass:[UIView class]] || !ALEViewIsInLibrarySearchController(searchBar)) {
 		return;
 	}
 	ALELastLibrarySearchBar = searchBar;
-	BOOL landscape = ALEIsLandscapeScreen();
-	if (ALELockedLibrarySearchBar == searchBar && ALELockedLibrarySearchBarWindow == searchBar.window && ALELockedLibrarySearchBarLandscape == landscape) {
-		return;
-	}
 	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0) {
 		return;
 	}
@@ -214,9 +206,6 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	ALEUpdatingLibrarySearchBarFrame = YES;
 	@try {
 		searchBar.frame = frame;
-		ALELockedLibrarySearchBar = searchBar;
-		ALELockedLibrarySearchBarWindow = searchBar.window;
-		ALELockedLibrarySearchBarLandscape = landscape;
 	} @finally {
 		ALEUpdatingLibrarySearchBarFrame = NO;
 	}
@@ -829,22 +818,15 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %hook SBHLibrarySearchController
 - (void)viewDidLoad {
 	%orig;
-	ALELibrarySearchControllerAppeared = NO;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
-	ALELibrarySearchControllerAppeared = NO;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELibrarySearchControllerAppeared = YES;
 	ALELayoutLibrarySearchController(self);
-}
-- (void)viewWillDisappear:(bool)arg1 {
-	%orig;
-	ALELibrarySearchControllerAppeared = NO;
 }
 - (void)viewWillLayoutSubviews {
 	%orig;
