@@ -108,6 +108,16 @@ static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
+static CGFloat ALELastLibraryRootGridMinX = 0;
+static CGFloat ALELastLibraryRootGridWidth = 0;
+static CGFloat ALELastLibraryRootListWidth = 0;
+static NSUInteger ALELastLibraryRootColumnCount = 0;
+static BOOL ALELastLibraryRootLandscape = NO;
+static SBHSearchBar *ALELastLibrarySearchBar = nil;
+
+static BOOL ALEIsLandscapeScreen(void);
+static NSUInteger ALELibraryCategoriesRootColumnCount(void);
+static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -204,6 +214,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		ALELastLibrarySearchBar = searchBar;
+	}
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
 	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
@@ -218,6 +231,101 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		searchTextFieldHorizontalEdgeInsets.left = 23;
 		searchTextFieldHorizontalEdgeInsets.right = 23;
 		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	}
+
+	ALEApplyLibrarySearchBarLayout(searchBar);
+}
+
+static BOOL ALEHasLibraryRootGridWidth(void) {
+	if (ALELastLibraryRootGridWidth <= 0 || ALELastLibraryRootListWidth <= 0) {
+		return NO;
+	}
+
+	if (ALELastLibraryRootColumnCount != ALELibraryCategoriesRootColumnCount()) {
+		return NO;
+	}
+
+	return ALELastLibraryRootLandscape == ALEIsLandscapeScreen();
+}
+
+static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
+	if (!ALEHasLibraryRootGridWidth() || referenceWidth <= 0) {
+		return 0;
+	}
+
+	CGFloat targetWidth = ALELastLibraryRootGridWidth;
+	if (targetWidth <= 0) {
+		return 0;
+	}
+
+	if (ALELastLibraryRootGridMinX + targetWidth > referenceWidth + 1.0) {
+		return 0;
+	}
+
+	return targetWidth;
+}
+
+static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame) {
+	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return frame;
+	}
+
+	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
+	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
+	if (targetWidth <= 0) {
+		return frame;
+	}
+
+	frame.size.width = targetWidth;
+	frame.origin.x = ALELastLibraryRootGridMinX;
+	return frame;
+}
+
+static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint center) {
+	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return center;
+	}
+
+	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
+	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
+	if (ALELibrarySearchTargetWidth(referenceWidth) <= 0) {
+		return center;
+	}
+
+	center.x = CGRectGetMidX(targetFrame);
+	return center;
+}
+
+static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
+	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return bounds;
+	}
+
+	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
+	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
+	if (targetWidth <= 0) {
+		return bounds;
+	}
+
+	bounds.size.width = targetWidth;
+	return bounds;
+}
+
+static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
+	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return;
+	}
+
+	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
+	BOOL frameNeedsUpdate = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(targetFrame)) > 0.5;
+	frameNeedsUpdate = frameNeedsUpdate || fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(targetFrame)) > 0.5;
+	if (frameNeedsUpdate) {
+		[searchBar setFrame:targetFrame];
+	}
+
+	CGPoint targetCenter = ALELibrarySearchTargetCenter(searchBar, searchBar.center);
+	if (fabs(searchBar.center.x - targetCenter.x) > 0.5) {
+		[searchBar setCenter:targetCenter];
 	}
 }
 
@@ -511,6 +619,8 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 
 	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
+	CGFloat gridMinX = CGFLOAT_MAX;
+	CGFloat gridMaxX = 0;
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
 		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
 		if (![iconView isKindOfClass:[UIView class]]) {
@@ -529,7 +639,18 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		if (iconView.hidden) {
 			iconView.hidden = NO;
 		}
+		gridMinX = MIN(gridMinX, CGRectGetMinX(frame));
+		gridMaxX = MAX(gridMaxX, CGRectGetMaxX(frame));
 		maxY = MAX(maxY, CGRectGetMaxY(frame));
+	}
+
+	if (gridMinX != CGFLOAT_MAX && gridMaxX > gridMinX) {
+		ALELastLibraryRootGridMinX = gridMinX;
+		ALELastLibraryRootGridWidth = gridMaxX - gridMinX;
+		ALELastLibraryRootListWidth = listWidth;
+		ALELastLibraryRootColumnCount = columnCount;
+		ALELastLibraryRootLandscape = landscape;
+		ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
 	}
 
 	return maxY;
@@ -712,6 +833,22 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 		}
 	}
 	ALEUpdateLibraryCategoriesRootScrollRange(listView, contentBottom);
+}
+%end
+
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	%orig(ALELibrarySearchTargetFrame(self, frame));
+}
+- (void)setBounds:(CGRect)bounds {
+	%orig(ALELibrarySearchTargetBounds(self, bounds));
+}
+- (void)setCenter:(CGPoint)center {
+	%orig(ALELibrarySearchTargetCenter(self, center));
+}
+- (void)layoutSubviews {
+	%orig;
+	ALEApplyLibrarySearchBarLayout(self);
 }
 %end
 
