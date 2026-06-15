@@ -111,9 +111,7 @@ static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGRect ALELastLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
-static CGRect ALEStableLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
 static UIWindow *ALELastLibraryRootGridWindow = nil;
-static UIWindow *ALEStableLibraryRootGridWindow = nil;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -196,11 +194,11 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	if (ALELibraryOverlayTransitioning) {
 		return;
 	}
-	if (!searchBar.superview || !searchBar.window || searchBar.window != ALEStableLibraryRootGridWindow || CGRectGetWidth(ALEStableLibraryRootGridFrameInWindow) <= 0) {
+	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0) {
 		return;
 	}
 
-	CGRect targetFrame = [searchBar.superview convertRect:ALEStableLibraryRootGridFrameInWindow fromView:nil];
+	CGRect targetFrame = [searchBar.superview convertRect:ALELastLibraryRootGridFrameInWindow fromView:nil];
 	CGRect frame = searchBar.frame;
 	frame.origin.x = CGRectGetMinX(targetFrame);
 	frame.size.width = CGRectGetWidth(targetFrame);
@@ -559,17 +557,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		CGRect gridFrame = CGRectMake(gridLeft, 0, gridRight - gridLeft, 1);
 		ALELastLibraryRootGridFrameInWindow = [listView convertRect:gridFrame toView:nil];
 		ALELastLibraryRootGridWindow = listView.window;
-		UIScrollView *scrollView = ALEEnclosingScrollView(listView);
-		BOOL scrollViewIsMoving = scrollView ? (scrollView.tracking || scrollView.dragging || scrollView.decelerating) : NO;
-		BOOL listViewIsAnimating = [listView.layer animationKeys].count > 0;
-		BOOL superviewIsAnimating = listView.superview ? ([listView.superview.layer animationKeys].count > 0) : NO;
-		BOOL viewIsAnimating = listViewIsAnimating || superviewIsAnimating;
-		BOOL needsInitialStableFrame = CGRectGetWidth(ALEStableLibraryRootGridFrameInWindow) <= 0;
-		BOOL canRefreshStableFrame = !ALELibraryOverlayTransitioning && !scrollViewIsMoving && !viewIsAnimating;
-		if (needsInitialStableFrame || canRefreshStableFrame) {
-			ALEStableLibraryRootGridFrameInWindow = ALELastLibraryRootGridFrameInWindow;
-			ALEStableLibraryRootGridWindow = ALELastLibraryRootGridWindow;
-		}
 		ALELayoutLibrarySearchBar(ALELastLibrarySearchBar);
 	}
 
