@@ -103,6 +103,9 @@ static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static CGRect ALELastLibraryRootSearchFrame = CGRectZero;
 static CGFloat ALELastLibraryRootListWidth = 0;
+static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
+
+static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -230,6 +233,8 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	if (!searchController.view) {
 		return;
 	}
+
+	ALECurrentLibrarySearchController = searchController;
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
@@ -750,8 +755,21 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibraryPodFolderController
+- (void)viewWillAppear:(bool)arg1 {
+	%orig;
+	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+}
+- (void)viewWillLayoutSubviews {
+	%orig;
+	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+}
+- (void)viewDidLayoutSubviews {
+	%orig;
+	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
