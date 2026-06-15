@@ -199,7 +199,7 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	frame.origin.x = CGRectGetMinX(targetFrame);
 	frame.size.width = CGRectGetWidth(targetFrame);
 
-	if (CGRectGetWidth(frame) <= 0 || (fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5)) {
+	if (CGRectGetWidth(frame) <= 0 || fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5) {
 		return;
 	}
 
