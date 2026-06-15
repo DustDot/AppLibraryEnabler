@@ -106,13 +106,12 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
+static BOOL ALELibraryOverlayTransitioning = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGRect ALELastLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
 static UIWindow *ALELastLibraryRootGridWindow = nil;
-static CGFloat ALELastLibraryRootGridMinXRatio = 0;
-static CGFloat ALELastLibraryRootGridMaxXRatio = 0;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -192,14 +191,14 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 	ALELastLibrarySearchBar = searchBar;
-	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || ALELastLibraryRootGridMaxXRatio <= ALELastLibraryRootGridMinXRatio) {
+	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0) {
 		return;
 	}
 
-	CGFloat targetWidth = CGRectGetWidth(searchBar.superview.bounds);
+	CGRect targetFrame = [searchBar.superview convertRect:ALELastLibraryRootGridFrameInWindow fromView:nil];
 	CGRect frame = searchBar.frame;
-	frame.origin.x = targetWidth * ALELastLibraryRootGridMinXRatio;
-	frame.size.width = targetWidth * (ALELastLibraryRootGridMaxXRatio - ALELastLibraryRootGridMinXRatio);
+	frame.origin.x = CGRectGetMinX(targetFrame);
+	frame.size.width = CGRectGetWidth(targetFrame);
 
 	if (CGRectGetWidth(frame) <= 0 || (fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5)) {
 		return;
@@ -552,14 +551,17 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	CGFloat gridLeft = horizontalInset;
 	CGFloat gridRight = horizontalInset + (podWidth * columnCount) + (columnGap * MAX((NSInteger)columnCount - 1, 0));
 	if (listView.window && gridRight > gridLeft) {
-		CGRect gridFrame = CGRectMake(gridLeft, 0, gridRight - gridLeft, 1);
-		ALELastLibraryRootGridFrameInWindow = [listView convertRect:gridFrame toView:nil];
-		ALELastLibraryRootGridWindow = listView.window;
-		CGFloat stableWidth = CGRectGetWidth(listView.window.bounds);
-		BOOL listWidthIsStable = stableWidth <= 0 || fabs(listWidth - stableWidth) <= 2.0;
-		if (listWidth > 0 && listWidthIsStable) {
-			ALELastLibraryRootGridMinXRatio = gridLeft / listWidth;
-			ALELastLibraryRootGridMaxXRatio = gridRight / listWidth;
+		UIScrollView *scrollView = ALEEnclosingScrollView(listView);
+		BOOL scrollViewIsMoving = scrollView ? (scrollView.tracking || scrollView.dragging || scrollView.decelerating) : NO;
+		BOOL listViewIsAnimating = [listView.layer animationKeys].count > 0;
+		BOOL superviewIsAnimating = listView.superview ? ([listView.superview.layer animationKeys].count > 0) : NO;
+		BOOL viewIsAnimating = listViewIsAnimating || superviewIsAnimating;
+		BOOL canUpdateSearchFrame = !ALELibraryOverlayTransitioning && !scrollViewIsMoving && !viewIsAnimating;
+		BOOL needsInitialSearchFrame = CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0;
+		if (needsInitialSearchFrame || canUpdateSearchFrame) {
+			CGRect gridFrame = CGRectMake(gridLeft, 0, gridRight - gridLeft, 1);
+			ALELastLibraryRootGridFrameInWindow = [listView convertRect:gridFrame toView:nil];
+			ALELastLibraryRootGridWindow = listView.window;
 		}
 		ALELayoutLibrarySearchBar(ALELastLibrarySearchBar);
 	}
@@ -810,6 +812,9 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
 	ALEUpdateOverlayLayout(self);
+	if (ALEOverlayShowsAppLibrary(self)) {
+		ALELibraryOverlayTransitioning = origValue > 0.001 && origValue < 0.999;
+	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
 }
@@ -834,6 +839,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	ALELibraryOverlayTransitioning = NO;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewWillLayoutSubviews {
