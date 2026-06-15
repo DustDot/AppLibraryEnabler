@@ -109,7 +109,7 @@ static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
-static CGRect ALELastLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
+static CGRect ALELastLibraryRootGridFrameInWindow = CGRectZero;
 static UIWindow *ALELastLibraryRootGridWindow = nil;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 
