@@ -106,6 +106,8 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
+static BOOL ALELibraryOverlayTransitioning = NO;
+static BOOL ALELibraryRootScrollInteracting = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
@@ -190,6 +192,9 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 	ALELastLibrarySearchBar = searchBar;
+	if (ALELibraryOverlayTransitioning || ALELibraryRootScrollInteracting) {
+		return;
+	}
 	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0) {
 		return;
 	}
@@ -547,6 +552,9 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	if (columnGap < 24.0) {
 		columnGap = 24.0;
 	}
+	UIScrollView *scrollView = ALEEnclosingScrollView(listView);
+	BOOL scrollViewIsScrolling = scrollView ? (scrollView.tracking || scrollView.dragging || scrollView.decelerating) : NO;
+	ALELibraryRootScrollInteracting = scrollViewIsScrolling;
 	CGFloat gridLeft = horizontalInset;
 	CGFloat gridRight = horizontalInset + (podWidth * columnCount) + (columnGap * MAX((NSInteger)columnCount - 1, 0));
 	if (listView.window && gridRight > gridLeft) {
@@ -802,6 +810,9 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
 	ALEUpdateOverlayLayout(self);
+	if (ALEOverlayShowsAppLibrary(self)) {
+		ALELibraryOverlayTransitioning = origValue > 0.001 && origValue < 0.999;
+	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
 }
@@ -822,10 +833,13 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
+	ALELibraryOverlayTransitioning = YES;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	ALELibraryOverlayTransitioning = NO;
+	ALELibraryRootScrollInteracting = NO;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewWillLayoutSubviews {
