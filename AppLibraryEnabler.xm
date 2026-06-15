@@ -16,7 +16,9 @@
 
 
 #import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <math.h>
 
 @interface SBIconView : UIView
 @end
@@ -107,6 +109,7 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
 static NSInteger ALELibraryFolderSearchRefreshTicks = 0;
 static BOOL ALELibraryFolderSearchRefreshScheduled = NO;
+static SBHSearchBar *ALECurrentLibrarySearchBar = nil;
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
@@ -237,6 +240,66 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	searchBar.frame = searchFrame;
 }
 
+static CGFloat ALELibrarySearchTargetWidthForSearchBar(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]] || CGRectIsEmpty(ALELastLibraryRootSearchFrame) || ALELastLibraryRootListWidth <= 0) {
+		return 0;
+	}
+
+	UIView *searchSuperview = searchBar.superview;
+	CGFloat layoutWidth = CGRectGetWidth(ALECurrentLibrarySearchController.view.bounds);
+	if (layoutWidth <= 0 && [searchSuperview isKindOfClass:[UIView class]]) {
+		layoutWidth = CGRectGetWidth(searchSuperview.bounds);
+	}
+	if (layoutWidth <= 0) {
+		return 0;
+	}
+
+	CGFloat scale = layoutWidth / ALELastLibraryRootListWidth;
+	if (scale <= 0) {
+		scale = 1.0;
+	}
+
+	return round(CGRectGetWidth(ALELastLibraryRootSearchFrame) * scale);
+}
+
+static CGFloat ALELayerHorizontalScale(CALayer *layer) {
+	if (!layer) {
+		return 1.0;
+	}
+
+	CATransform3D transform = layer.transform;
+	CGFloat scaleX = sqrt((transform.m11 * transform.m11) + (transform.m12 * transform.m12));
+	return scaleX > 0 ? scaleX : 1.0;
+}
+
+static CGFloat ALEInheritedHorizontalScaleForView(UIView *view) {
+	CGFloat scaleX = 1.0;
+	UIView *currentView = view.superview;
+	while ([currentView isKindOfClass:[UIView class]]) {
+		CALayer *presentationLayer = currentView.layer.presentationLayer;
+		scaleX *= ALELayerHorizontalScale(presentationLayer ?: currentView.layer);
+		currentView = currentView.superview;
+	}
+
+	return scaleX > 0 ? scaleX : 1.0;
+}
+
+static void ALEApplyLibrarySearchAnimationCompensation(void) {
+	SBHSearchBar *searchBar = ALECurrentLibrarySearchBar;
+	CGFloat targetWidth = ALELibrarySearchTargetWidthForSearchBar(searchBar);
+	if (![searchBar isKindOfClass:[UIView class]] || targetWidth <= 0) {
+		return;
+	}
+
+	CGFloat inheritedScaleX = ALEInheritedHorizontalScaleForView(searchBar);
+	if (fabs(inheritedScaleX - 1.0) <= 0.01) {
+		searchBar.transform = CGAffineTransformIdentity;
+		return;
+	}
+
+	searchBar.transform = CGAffineTransformMakeScale(1.0 / inheritedScaleX, 1.0);
+}
+
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
 	if (!searchController.view) {
 		return;
@@ -245,6 +308,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	ALECurrentLibrarySearchController = searchController;
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		ALECurrentLibrarySearchBar = searchBar;
+	}
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
 	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
@@ -796,11 +862,16 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)ale_refreshLibrarySearchDuringFolderAnimation {
 	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALEApplyLibrarySearchAnimationCompensation();
 
 	if (ALELibraryFolderSearchRefreshTicks > 0) {
 		ALELibraryFolderSearchRefreshTicks--;
 		[self performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0.016];
 	} else {
+		if ([ALECurrentLibrarySearchBar isKindOfClass:[UIView class]]) {
+			ALECurrentLibrarySearchBar.transform = CGAffineTransformIdentity;
+			ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+		}
 		ALELibraryFolderSearchRefreshScheduled = NO;
 	}
 }
