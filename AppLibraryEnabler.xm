@@ -48,6 +48,7 @@
 
 @interface SBHLibraryPodFolderController (AppLibraryEnabler)
 + (id)iconLocation;
+- (void)ale_refreshLibrarySearchDuringFolderAnimation;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -104,6 +105,8 @@ static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static CGRect ALELastLibraryRootSearchFrame = CGRectZero;
 static CGFloat ALELastLibraryRootListWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
+static NSInteger ALELibraryFolderSearchRefreshTicks = 0;
+static BOOL ALELibraryFolderSearchRefreshScheduled = NO;
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
@@ -253,6 +256,18 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		searchTextFieldHorizontalEdgeInsets.left = 23;
 		searchTextFieldHorizontalEdgeInsets.right = 23;
 		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	}
+}
+
+static void ALEStartLibraryFolderSearchRefresh(id controller) {
+	if (!controller) {
+		return;
+	}
+
+	ALELibraryFolderSearchRefreshTicks = 28;
+	if (!ALELibraryFolderSearchRefreshScheduled && [controller respondsToSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation)]) {
+		ALELibraryFolderSearchRefreshScheduled = YES;
+		[controller performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0];
 	}
 }
 
@@ -757,22 +772,32 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %hook SBHLibraryPodFolderController
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALEStartLibraryFolderSearchRefresh(self);
 }
 - (void)viewWillLayoutSubviews {
 	%orig;
-	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALEStartLibraryFolderSearchRefresh(self);
 }
 - (void)viewDidLayoutSubviews {
 	%orig;
-	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALEStartLibraryFolderSearchRefresh(self);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALEStartLibraryFolderSearchRefresh(self);
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
+}
+- (void)ale_refreshLibrarySearchDuringFolderAnimation {
+	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+
+	if (ALELibraryFolderSearchRefreshTicks > 0) {
+		ALELibraryFolderSearchRefreshTicks--;
+		[self performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0.016];
+	} else {
+		ALELibraryFolderSearchRefreshScheduled = NO;
+	}
 }
 %end
 
