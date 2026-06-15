@@ -108,7 +108,6 @@ static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
-static CGFloat ALELastLibraryRootRenderWidth = 0;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -192,7 +191,7 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 		return;
 	}
 
-	CGFloat fullWidth = ALELastLibraryRootRenderWidth > 0 ? ALELastLibraryRootRenderWidth : ALEFullWidthForView(overlayController.view);
+	CGFloat fullWidth = ALEFullWidthForView(overlayController.view);
 	NSLayoutConstraint *contentWidthConstraint = ALEValueForKey(overlayController, @"contentWidthConstraint");
 	if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
 		contentWidthConstraint.constant = fullWidth;
@@ -449,9 +448,12 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		return 0;
 	}
 
-	CGFloat listWidth = ALEFullWidthForView(listView);
+	CGFloat listWidth = CGRectGetWidth(listView.bounds);
 	if (listWidth <= 0) {
-		listWidth = CGRectGetWidth(listView.bounds);
+		listWidth = CGRectGetWidth(listView.superview.bounds);
+	}
+	if (listWidth <= 0) {
+		listWidth = ALEFullWidthForView(listView);
 	}
 
 	BOOL landscape = ALEIsLandscapeScreen();
@@ -499,7 +501,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	if (columnGap < 24.0) {
 		columnGap = 24.0;
 	}
-	ALELastLibraryRootRenderWidth = (podWidth * columnCount) + (columnGap * MAX((NSInteger)columnCount - 1, 0));
 
 	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
 	if (rowStep < podHeight + 28.0) {
@@ -717,14 +718,14 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %hook SBHomeScreenOverlayViewController
 - (CGFloat)contentWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
-		return ALELastLibraryRootRenderWidth > 0 ? ALELastLibraryRootRenderWidth : ALEFullWidthForView(self.view);
+		return ALEFullWidthForView(self.view);
 	}
 
 	return %orig;
 }
 - (CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
-		return ALELastLibraryRootRenderWidth > 0 ? ALELastLibraryRootRenderWidth : containerWidth;
+		return containerWidth;
 	}
 
 	return %orig;
