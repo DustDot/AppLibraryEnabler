@@ -258,7 +258,7 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 		return 0;
 	}
 
-	if (ALELastLibraryRootGridMinX + targetWidth > referenceWidth + 1.0) {
+	if (targetWidth > referenceWidth + 1.0) {
 		return 0;
 	}
 
@@ -277,7 +277,7 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 	}
 
 	frame.size.width = targetWidth;
-	frame.origin.x = ALELastLibraryRootGridMinX;
+	frame.origin.x = (referenceWidth - targetWidth) / 2.0;
 	return frame;
 }
 
@@ -314,6 +314,11 @@ static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bound
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return;
+	}
+
+	CGRect targetBounds = ALELibrarySearchTargetBounds(searchBar, searchBar.bounds);
+	if (fabs(CGRectGetWidth(searchBar.bounds) - CGRectGetWidth(targetBounds)) > 0.5) {
+		[searchBar setBounds:targetBounds];
 	}
 
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
