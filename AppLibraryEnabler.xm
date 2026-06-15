@@ -209,7 +209,12 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	CGFloat scale = CGRectGetWidth(searchSuperview.bounds) / ALELastLibraryRootListWidth;
+	CGFloat layoutWidth = CGRectGetWidth(ALECurrentLibrarySearchController.view.bounds);
+	if (layoutWidth <= 0) {
+		layoutWidth = CGRectGetWidth(searchSuperview.bounds);
+	}
+
+	CGFloat scale = layoutWidth / ALELastLibraryRootListWidth;
 	if (scale <= 0) {
 		scale = 1.0;
 	}
