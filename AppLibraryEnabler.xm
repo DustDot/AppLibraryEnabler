@@ -107,6 +107,8 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
 static NSInteger ALELibraryFolderSearchRefreshTicks = 0;
 static BOOL ALELibraryFolderSearchRefreshScheduled = NO;
+static BOOL ALELibrarySearchBackdropWasHidden = NO;
+static BOOL ALEHasLibrarySearchBackdropHiddenState = NO;
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
@@ -275,6 +277,24 @@ static void ALEStartLibraryFolderSearchRefresh(id controller) {
 	if (!ALELibraryFolderSearchRefreshScheduled && [controller respondsToSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation)]) {
 		ALELibraryFolderSearchRefreshScheduled = YES;
 		[controller performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0];
+	}
+}
+
+static void ALESetLibrarySearchBackdropHiddenDuringFolderAnimation(BOOL hidden) {
+	MTMaterialView *searchBackdropView = ALEValueForKey(ALECurrentLibrarySearchController, @"_searchBackdropView");
+	if (![searchBackdropView isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	if (hidden) {
+		if (!ALEHasLibrarySearchBackdropHiddenState) {
+			ALELibrarySearchBackdropWasHidden = searchBackdropView.hidden;
+			ALEHasLibrarySearchBackdropHiddenState = YES;
+		}
+		searchBackdropView.hidden = YES;
+	} else if (ALEHasLibrarySearchBackdropHiddenState) {
+		searchBackdropView.hidden = ALELibrarySearchBackdropWasHidden;
+		ALEHasLibrarySearchBackdropHiddenState = NO;
 	}
 }
 
@@ -798,11 +818,13 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)ale_refreshLibrarySearchDuringFolderAnimation {
 	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALESetLibrarySearchBackdropHiddenDuringFolderAnimation(YES);
 
 	if (ALELibraryFolderSearchRefreshTicks > 0) {
 		ALELibraryFolderSearchRefreshTicks--;
 		[self performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0.016];
 	} else {
+		ALESetLibrarySearchBackdropHiddenDuringFolderAnimation(NO);
 		ALELibraryFolderSearchRefreshScheduled = NO;
 	}
 }
