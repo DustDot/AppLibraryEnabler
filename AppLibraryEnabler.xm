@@ -115,7 +115,6 @@ static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static SBHSearchBar *ALELockedLibrarySearchBar = nil;
 static UIWindow *ALELockedLibrarySearchBarWindow = nil;
 static BOOL ALELockedLibrarySearchBarLandscape = NO;
-static CGRect ALELockedLibrarySearchBarFrame = {{0, 0}, {0, 0}};
 static BOOL ALELibrarySearchControllerAppeared = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
@@ -183,20 +182,6 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	}
 	BOOL landscape = ALEIsLandscapeScreen();
 	if (ALELockedLibrarySearchBar == searchBar && ALELockedLibrarySearchBarWindow == searchBar.window && ALELockedLibrarySearchBarLandscape == landscape) {
-		CGRect lockedFrame = ALELockedLibrarySearchBarFrame;
-		lockedFrame.origin.y = searchBar.frame.origin.y;
-		lockedFrame.size.height = searchBar.frame.size.height;
-		BOOL frameMatchesLockedFrame = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(lockedFrame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(lockedFrame)) <= 0.5;
-		if (CGRectGetWidth(lockedFrame) <= 0 || frameMatchesLockedFrame) {
-			return;
-		}
-
-		ALEUpdatingLibrarySearchBarFrame = YES;
-		@try {
-			searchBar.frame = lockedFrame;
-		} @finally {
-			ALEUpdatingLibrarySearchBarFrame = NO;
-		}
 		return;
 	}
 	if (!searchBar.superview || !searchBar.window || ALELastLibraryRootGridScreenMaxX <= ALELastLibraryRootGridScreenMinX) {
@@ -209,8 +194,7 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	frame.origin.x = leftPoint.x;
 	frame.size.width = rightPoint.x - leftPoint.x;
 
-	BOOL frameMatchesTargetFrame = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5;
-	if (CGRectGetWidth(frame) <= 0 || frameMatchesTargetFrame) {
+	if (CGRectGetWidth(frame) <= 0 || (fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5)) {
 		return;
 	}
 
@@ -220,7 +204,6 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		ALELockedLibrarySearchBar = searchBar;
 		ALELockedLibrarySearchBarWindow = searchBar.window;
 		ALELockedLibrarySearchBarLandscape = landscape;
-		ALELockedLibrarySearchBarFrame = frame;
 	} @finally {
 		ALEUpdatingLibrarySearchBarFrame = NO;
 	}
