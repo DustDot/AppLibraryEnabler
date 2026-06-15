@@ -115,10 +115,6 @@ static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGFloat ALELastLibraryRootGridScreenMinX = 0;
 static CGFloat ALELastLibraryRootGridScreenMaxX = 0;
-static CGFloat ALEStableLibraryRootGridScreenMinX = 0;
-static CGFloat ALEStableLibraryRootGridScreenMaxX = 0;
-static CGFloat ALEStableLibraryRootGridListWidth = 0;
-static BOOL ALEStableLibraryRootGridLandscape = NO;
 static CGFloat ALELockedLibrarySearchBarScreenMinX = 0;
 static CGFloat ALELockedLibrarySearchBarScreenMaxX = 0;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
@@ -196,15 +192,15 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	}
 
 	if (ALELockedLibrarySearchBar != searchBar || ALELockedLibrarySearchBarWindow != searchBar.window || ALELockedLibrarySearchBarLandscape != landscape) {
-		if (ALEStableLibraryRootGridScreenMaxX <= ALEStableLibraryRootGridScreenMinX) {
+		if (ALELastLibraryRootGridScreenMaxX <= ALELastLibraryRootGridScreenMinX) {
 			return;
 		}
 
 		ALELockedLibrarySearchBar = searchBar;
 		ALELockedLibrarySearchBarWindow = searchBar.window;
 		ALELockedLibrarySearchBarLandscape = landscape;
-		ALELockedLibrarySearchBarScreenMinX = ALEStableLibraryRootGridScreenMinX;
-		ALELockedLibrarySearchBarScreenMaxX = ALEStableLibraryRootGridScreenMaxX;
+		ALELockedLibrarySearchBarScreenMinX = ALELastLibraryRootGridScreenMinX;
+		ALELockedLibrarySearchBarScreenMaxX = ALELastLibraryRootGridScreenMaxX;
 	}
 
 	CGPoint leftPoint = [searchBar.superview convertPoint:CGPointMake(ALELockedLibrarySearchBarScreenMinX, 0) fromView:nil];
@@ -570,23 +566,10 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	CGFloat gridLeft = horizontalInset;
 	CGFloat gridRight = horizontalInset + (podWidth * columnCount) + (columnGap * MAX((NSInteger)columnCount - 1, 0));
 	if (listView.window && gridRight > gridLeft) {
-		CGFloat screenWidth = CGRectGetWidth(listView.window.bounds);
-		if (screenWidth <= 0) {
-			screenWidth = CGRectGetWidth([UIScreen mainScreen].bounds);
-		}
-		CGFloat listScreenMinX = (screenWidth - listWidth) / 2.0;
-		ALELastLibraryRootGridScreenMinX = listScreenMinX + gridLeft;
-		ALELastLibraryRootGridScreenMaxX = listScreenMinX + gridRight;
-		BOOL layoutIsStable = ![listView.layer animationKeys].count && ![listView.superview.layer animationKeys].count;
-		BOOL layoutChanged = fabs(ALEStableLibraryRootGridListWidth - listWidth) > 1.0 || ALEStableLibraryRootGridLandscape != landscape;
-		BOOL needsInitialStableLayout = ALEStableLibraryRootGridScreenMaxX <= ALEStableLibraryRootGridScreenMinX;
-		if (needsInitialStableLayout || (layoutIsStable && layoutChanged)) {
-			ALEStableLibraryRootGridScreenMinX = ALELastLibraryRootGridScreenMinX;
-			ALEStableLibraryRootGridScreenMaxX = ALELastLibraryRootGridScreenMaxX;
-			ALEStableLibraryRootGridListWidth = listWidth;
-			ALEStableLibraryRootGridLandscape = landscape;
-			ALELockedLibrarySearchBar = nil;
-		}
+		CGRect gridFrame = CGRectMake(gridLeft, 0, gridRight - gridLeft, 1);
+		CGRect screenFrame = [listView convertRect:gridFrame toView:nil];
+		ALELastLibraryRootGridScreenMinX = CGRectGetMinX(screenFrame);
+		ALELastLibraryRootGridScreenMaxX = CGRectGetMaxX(screenFrame);
 	}
 
 	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
@@ -869,6 +852,8 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	ALELibrarySearchControllerAppeared = NO;
 	ALELockedLibrarySearchBar = nil;
 	ALELockedLibrarySearchBarWindow = nil;
+	ALELockedLibrarySearchBarScreenMinX = 0;
+	ALELockedLibrarySearchBarScreenMaxX = 0;
 	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewDidAppear:(bool)arg1 {
