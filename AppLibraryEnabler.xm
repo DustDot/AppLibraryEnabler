@@ -258,6 +258,10 @@ static BOOL ALEIsLandscapeScreen(void) {
 	return screenSize.width > screenSize.height;
 }
 
+static NSUInteger ALELibraryCategoriesRootColumnCount(void) {
+	return ALEIsLandscapeScreen() ? 4 : 3;
+}
+
 static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
@@ -321,6 +325,42 @@ static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
 	}
 
 	return ALEIsLibraryCategoriesRootFolder(model.folder);
+}
+
+static NSUInteger ALELibraryCategoriesRootRowCount(SBIconListView *listView) {
+	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)]) {
+		return 0;
+	}
+
+	NSArray *icons = listView.icons;
+	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
+		return 0;
+	}
+
+	NSUInteger columnCount = ALELibraryCategoriesRootColumnCount();
+	return ((NSUInteger)icons.count + columnCount - 1) / columnCount;
+}
+
+static NSRange ALEExpandedLibraryRootColumnRange(SBIconListView *listView, NSRange proposedRange) {
+	if (!ALEIsLibraryCategoriesRootListView(listView)) {
+		return proposedRange;
+	}
+
+	NSUInteger columnCount = ALELibraryCategoriesRootColumnCount();
+	if (columnCount == 0) {
+		return proposedRange;
+	}
+
+	return NSMakeRange(0, columnCount * 2);
+}
+
+static NSRange ALEExpandedLibraryRootRowRange(SBIconListView *listView, NSRange proposedRange) {
+	NSUInteger rowCount = ALELibraryCategoriesRootRowCount(listView);
+	if (rowCount == 0) {
+		return proposedRange;
+	}
+
+	return NSMakeRange(0, rowCount * 2);
 }
 
 static SBIconListView *ALELibraryCategoriesRootListViewInView(UIView *view) {
@@ -417,7 +457,7 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	}
 
 	BOOL landscape = ALEIsLandscapeScreen();
-	NSUInteger columnCount = landscape ? 4 : 3;
+	NSUInteger columnCount = ALELibraryCategoriesRootColumnCount();
 	CGFloat topY = CGFLOAT_MAX;
 	CGFloat secondY = CGFLOAT_MAX;
 	CGFloat podWidth = 0;
@@ -602,6 +642,12 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBIconListView
+- (void)setVisibleColumnRange:(NSRange)range {
+	%orig(ALEExpandedLibraryRootColumnRange(self, range));
+}
+- (void)setVisibleRowRange:(NSRange)range {
+	%orig(ALEExpandedLibraryRootRowRange(self, range));
+}
 - (void)setFrame:(CGRect)frame {
 	%orig;
 	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
@@ -656,7 +702,15 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 		return;
 	}
 
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(listView);
+	CGFloat contentBottom = 0;
+	if ([listView respondsToSelector:@selector(icons)] && [listView respondsToSelector:@selector(iconViewForIcon:)]) {
+		for (id icon in listView.icons) {
+			UIView *iconView = [listView iconViewForIcon:icon];
+			if ([iconView isKindOfClass:[UIView class]] && !iconView.hidden) {
+				contentBottom = MAX(contentBottom, CGRectGetMaxY(iconView.frame));
+			}
+		}
+	}
 	ALEUpdateLibraryCategoriesRootScrollRange(listView, contentBottom);
 }
 %end
