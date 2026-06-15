@@ -102,9 +102,11 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEHasLibrarySearchHorizontalRange = NO;
+static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
 static CGFloat ALELibrarySearchLayoutWidth = 0;
 static CGFloat ALELibrarySearchWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
+static SBHSearchBar *ALECurrentLibrarySearchBar = nil;
 
 static BOOL ALEIsLandscapeScreen(void);
 
@@ -197,6 +199,44 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	}
 }
 
+static CGFloat ALELibrarySearchTargetWidth(void) {
+	if (!ALEHasLibrarySearchHorizontalRange || ALELibrarySearchLayoutWidth <= 0 || ALELibrarySearchWidth <= 0 || !ALECurrentLibrarySearchController.view) {
+		return 0;
+	}
+
+	CGFloat viewWidth = CGRectGetWidth(ALECurrentLibrarySearchController.view.bounds);
+	if (viewWidth <= 0) {
+		viewWidth = CGRectGetWidth(ALECurrentLibrarySearchController.view.frame);
+	}
+	if (viewWidth <= 0) {
+		return 0;
+	}
+
+	return round(ALELibrarySearchWidth * (viewWidth / ALELibrarySearchLayoutWidth));
+}
+
+static CGRect ALELibrarySearchFrameForSearchBar(SBHSearchBar *searchBar, CGRect frame) {
+	if (!ALECurrentLibrarySearchBar || searchBar != ALECurrentLibrarySearchBar || ![searchBar isKindOfClass:[UIView class]]) {
+		return frame;
+	}
+
+	UIView *superview = searchBar.superview;
+	UIView *layoutView = [superview isKindOfClass:[UIView class]] ? superview : ALECurrentLibrarySearchController.view;
+	CGFloat targetWidth = ALELibrarySearchTargetWidth();
+	if (targetWidth <= 0) {
+		return frame;
+	}
+
+	CGFloat centerX = CGRectGetMidX(layoutView.bounds);
+	frame.size.width = targetWidth;
+	frame.origin.x = round(centerX - (targetWidth * 0.5));
+	if (CGRectGetHeight(frame) <= 0) {
+		frame.size.height = CGRectGetHeight(searchBar.bounds);
+	}
+
+	return frame;
+}
+
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
 	if (!searchController.view) {
 		return;
@@ -205,6 +245,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	ALECurrentLibrarySearchController = searchController;
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		ALECurrentLibrarySearchBar = searchBar;
+	}
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
 	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
@@ -215,18 +258,12 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 
 	if (ALEHasLibrarySearchHorizontalRange && ALELibrarySearchLayoutWidth > 0 && ALELibrarySearchWidth > 0 && [searchBar isKindOfClass:[UIView class]]) {
-		CGFloat scale = CGRectGetWidth(searchController.view.bounds) / ALELibrarySearchLayoutWidth;
-		CGFloat targetWidth = round(ALELibrarySearchWidth * scale);
-		CGRect targetFrame = searchBar.frame;
-		CGFloat currentCenterX = CGRectGetMidX(targetFrame);
-		targetFrame.size.width = targetWidth;
-		targetFrame.origin.x = round(currentCenterX - (targetWidth * 0.5));
-		if (CGRectGetHeight(targetFrame) <= 0) {
-			targetFrame.size.height = CGRectGetHeight(searchBar.bounds);
-		}
+		CGRect targetFrame = ALELibrarySearchFrameForSearchBar(searchBar, searchBar.frame);
 		BOOL animationsEnabled = [UIView areAnimationsEnabled];
 		[UIView setAnimationsEnabled:NO];
+		ALEUpdatingLibrarySearchBarFrame = YES;
 		searchBar.frame = targetFrame;
+		ALEUpdatingLibrarySearchBarFrame = NO;
 		[UIView setAnimationsEnabled:animationsEnabled];
 	}
 
@@ -701,6 +738,16 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (void)viewWillLayoutSubviews {
 	%orig;
 	ALEUpdateOverlayLayout(self);
+}
+%end
+
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	if (!ALEUpdatingLibrarySearchBarFrame) {
+		frame = ALELibrarySearchFrameForSearchBar(self, frame);
+	}
+
+	%orig(frame);
 }
 %end
 
