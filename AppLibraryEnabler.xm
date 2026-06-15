@@ -185,9 +185,6 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 	BOOL landscape = ALEIsLandscapeScreen();
-	if (ALELockedLibrarySearchBar == searchBar && ALELockedLibrarySearchBarWindow == searchBar.window && ALELockedLibrarySearchBarLandscape == landscape) {
-		return;
-	}
 	if (!searchBar.superview || !searchBar.window || ALELastLibraryRootGridScreenMaxX <= ALELastLibraryRootGridScreenMinX) {
 		return;
 	}
@@ -198,7 +195,8 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 	frame.origin.x = leftPoint.x;
 	frame.size.width = rightPoint.x - leftPoint.x;
 
-	if (CGRectGetWidth(frame) <= 0 || (fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5)) {
+	BOOL frameMatchesTargetFrame = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5;
+	if (CGRectGetWidth(frame) <= 0 || frameMatchesTargetFrame) {
 		return;
 	}
 
@@ -245,7 +243,7 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	}
 }
 
-static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
+static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController, BOOL layoutSearchBar) {
 	if (!searchController.view) {
 		return;
 	}
@@ -262,7 +260,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[containerView setFrame:fullFrame];
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
-	ALELayoutLibrarySearchBar(searchBar);
+	if (layoutSearchBar) {
+		ALELayoutLibrarySearchBar(searchBar);
+	}
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
@@ -809,6 +809,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %new
 - (void)ale_layoutLibrarySearchBarOnce {
 	ALELibrarySearchControllerAppeared = YES;
+	ALELayoutLibrarySearchController(self, NO);
 	SBHSearchBar *searchBar = ALEValueForKey(self, @"_searchBar");
 	if ([searchBar isKindOfClass:[UIView class]]) {
 		ALELastLibrarySearchBar = searchBar;
@@ -818,19 +819,19 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (void)viewDidLoad {
 	%orig;
 	ALELibrarySearchControllerAppeared = NO;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
 	ALELibrarySearchControllerAppeared = NO;
 	ALELockedLibrarySearchBar = nil;
 	ALELockedLibrarySearchBarWindow = nil;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	ALELibrarySearchControllerAppeared = YES;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(ale_layoutLibrarySearchBarOnce) object:nil];
 	[self performSelector:@selector(ale_layoutLibrarySearchBarOnce) withObject:nil afterDelay:0.05];
 }
@@ -841,11 +842,11 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)viewWillLayoutSubviews {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)_layoutSearchViews {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 	MTMaterialView *searchBackdropView = ALEValueForKey(self, @"_searchBackdropView");
 
 	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
