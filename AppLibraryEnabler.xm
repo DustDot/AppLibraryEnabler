@@ -106,7 +106,6 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
 static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
-static BOOL ALELibraryOverlayTransitioning = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
@@ -191,9 +190,6 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 	ALELastLibrarySearchBar = searchBar;
-	if (ALELibraryOverlayTransitioning) {
-		return;
-	}
 	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0) {
 		return;
 	}
@@ -806,9 +802,6 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
 	ALEUpdateOverlayLayout(self);
-	if (ALEOverlayShowsAppLibrary(self)) {
-		ALELibraryOverlayTransitioning = origValue > 0.001 && origValue < 0.999;
-	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
 }
@@ -829,12 +822,10 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
-	ALELibraryOverlayTransitioning = YES;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELibraryOverlayTransitioning = NO;
 	ALELayoutLibrarySearchController(self);
 }
 - (void)viewWillLayoutSubviews {
