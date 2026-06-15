@@ -218,7 +218,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		CGFloat scale = CGRectGetWidth(searchController.view.bounds) / ALELibrarySearchLayoutWidth;
 		CGFloat targetWidth = round(ALELibrarySearchWidth * scale);
 		CGRect targetFrame = searchBar.frame;
+		CGFloat currentCenterX = CGRectGetMidX(targetFrame);
 		targetFrame.size.width = targetWidth;
+		targetFrame.origin.x = round(currentCenterX - (targetWidth * 0.5));
 		if (CGRectGetHeight(targetFrame) <= 0) {
 			targetFrame.size.height = CGRectGetHeight(searchBar.bounds);
 		}
