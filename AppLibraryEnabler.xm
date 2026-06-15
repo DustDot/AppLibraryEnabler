@@ -107,6 +107,8 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
 static NSInteger ALELibraryFolderSearchRefreshTicks = 0;
 static BOOL ALELibraryFolderSearchRefreshScheduled = NO;
+static BOOL ALELibrarySearchBarWasHidden = NO;
+static BOOL ALEHasLibrarySearchBarHiddenState = NO;
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
@@ -278,46 +280,22 @@ static void ALEStartLibraryFolderSearchRefresh(id controller) {
 	}
 }
 
-static BOOL ALEViewContainsView(UIView *view, UIView *descendant) {
-	if (![view isKindOfClass:[UIView class]] || ![descendant isKindOfClass:[UIView class]]) {
-		return NO;
-	}
-	if (view == descendant) {
-		return YES;
-	}
-
-	for (UIView *subview in view.subviews) {
-		if (ALEViewContainsView(subview, descendant)) {
-			return YES;
-		}
-	}
-
-	return NO;
-}
-
-static NSArray *ALEFilteredLibraryPodExtraViews(NSArray *views) {
-	if (![views isKindOfClass:[NSArray class]] || views.count == 0) {
-		return views;
-	}
-
+static void ALESetLibrarySearchBarHiddenDuringFolderAnimation(BOOL hidden) {
 	SBHSearchBar *searchBar = ALEValueForKey(ALECurrentLibrarySearchController, @"_searchBar");
-	UIView *searchBackdropView = ALEValueForKey(ALECurrentLibrarySearchController, @"_searchBackdropView");
-	if (![searchBar isKindOfClass:[UIView class]] && ![searchBackdropView isKindOfClass:[UIView class]]) {
-		return views;
+	if (![searchBar isKindOfClass:[UIView class]]) {
+		return;
 	}
 
-	NSMutableArray *filteredViews = [NSMutableArray arrayWithCapacity:views.count];
-	for (id view in views) {
-		BOOL containsSearchView = NO;
-		if ([view isKindOfClass:[UIView class]]) {
-			containsSearchView = ALEViewContainsView(view, searchBar) || ALEViewContainsView(view, searchBackdropView);
+	if (hidden) {
+		if (!ALEHasLibrarySearchBarHiddenState) {
+			ALELibrarySearchBarWasHidden = searchBar.hidden;
+			ALEHasLibrarySearchBarHiddenState = YES;
 		}
-		if (!containsSearchView) {
-			[filteredViews addObject:view];
-		}
+		searchBar.hidden = YES;
+	} else if (ALEHasLibrarySearchBarHiddenState) {
+		searchBar.hidden = ALELibrarySearchBarWasHidden;
+		ALEHasLibrarySearchBarHiddenState = NO;
 	}
-
-	return filteredViews;
 }
 
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL libraryRootLayout) {
@@ -819,12 +797,6 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibraryPodFolderController
-- (NSArray *)extraViews {
-	return ALEFilteredLibraryPodExtraViews(%orig);
-}
-- (NSArray *)extraViewsContainers {
-	return ALEFilteredLibraryPodExtraViews(%orig);
-}
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
 	ALEStartLibraryFolderSearchRefresh(self);
@@ -846,11 +818,14 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)ale_refreshLibrarySearchDuringFolderAnimation {
 	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
+	ALESetLibrarySearchBarHiddenDuringFolderAnimation(YES);
 
 	if (ALELibraryFolderSearchRefreshTicks > 0) {
 		ALELibraryFolderSearchRefreshTicks--;
 		[self performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0.016];
 	} else {
+		ALESetLibrarySearchBarHiddenDuringFolderAnimation(NO);
+		ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
 		ALELibraryFolderSearchRefreshScheduled = NO;
 	}
 }
