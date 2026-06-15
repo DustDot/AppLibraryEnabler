@@ -107,8 +107,8 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
 static NSInteger ALELibraryFolderSearchRefreshTicks = 0;
 static BOOL ALELibraryFolderSearchRefreshScheduled = NO;
-static BOOL ALELibrarySearchBackdropWasHidden = NO;
-static BOOL ALEHasLibrarySearchBackdropHiddenState = NO;
+static SBHSearchBar *ALECurrentLibrarySearchBar = nil;
+static BOOL ALEUpdatingLibrarySearchBarFrame = NO;
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
@@ -236,9 +236,41 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 
 	searchFrame.origin.x = left;
 	searchFrame.size.width = right - left;
+	ALEUpdatingLibrarySearchBarFrame = YES;
 	searchBar.frame = searchFrame;
+	ALEUpdatingLibrarySearchBarFrame = NO;
 	searchBar.clipsToBounds = YES;
 	searchBar.layer.masksToBounds = YES;
+}
+
+static CGRect ALEConstrainedLibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
+	if (!ALELibraryFolderSearchRefreshScheduled || !ALECurrentLibrarySearchBar || searchBar != ALECurrentLibrarySearchBar || CGRectIsEmpty(ALELastLibraryRootSearchFrame) || ALELastLibraryRootListWidth <= 0) {
+		return frame;
+	}
+
+	UIView *searchSuperview = searchBar.superview;
+	if (![searchSuperview isKindOfClass:[UIView class]]) {
+		return frame;
+	}
+
+	CGFloat layoutWidth = CGRectGetWidth(ALECurrentLibrarySearchController.view.bounds);
+	if (layoutWidth <= 0) {
+		layoutWidth = CGRectGetWidth(searchSuperview.bounds);
+	}
+
+	CGFloat scale = layoutWidth / ALELastLibraryRootListWidth;
+	if (scale <= 0) {
+		scale = 1.0;
+	}
+
+	CGFloat targetWidth = round(CGRectGetWidth(ALELastLibraryRootSearchFrame) * scale);
+	if (targetWidth <= 0) {
+		return frame;
+	}
+
+	frame.size.width = targetWidth;
+	frame.origin.x = round((CGRectGetWidth(searchSuperview.bounds) - targetWidth) * 0.5);
+	return frame;
 }
 
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
@@ -249,6 +281,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	ALECurrentLibrarySearchController = searchController;
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		ALECurrentLibrarySearchBar = searchBar;
+	}
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
 	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
@@ -277,24 +312,6 @@ static void ALEStartLibraryFolderSearchRefresh(id controller) {
 	if (!ALELibraryFolderSearchRefreshScheduled && [controller respondsToSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation)]) {
 		ALELibraryFolderSearchRefreshScheduled = YES;
 		[controller performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0];
-	}
-}
-
-static void ALESetLibrarySearchBackdropHiddenDuringFolderAnimation(BOOL hidden) {
-	MTMaterialView *searchBackdropView = ALEValueForKey(ALECurrentLibrarySearchController, @"_searchBackdropView");
-	if (![searchBackdropView isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	if (hidden) {
-		if (!ALEHasLibrarySearchBackdropHiddenState) {
-			ALELibrarySearchBackdropWasHidden = searchBackdropView.hidden;
-			ALEHasLibrarySearchBackdropHiddenState = YES;
-		}
-		searchBackdropView.hidden = YES;
-	} else if (ALEHasLibrarySearchBackdropHiddenState) {
-		searchBackdropView.hidden = ALELibrarySearchBackdropWasHidden;
-		ALEHasLibrarySearchBackdropHiddenState = NO;
 	}
 }
 
@@ -760,6 +777,16 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 %end
 
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	if (!ALEUpdatingLibrarySearchBarFrame) {
+		frame = ALEConstrainedLibrarySearchBarFrame(self, frame);
+	}
+
+	%orig(frame);
+}
+%end
+
 %hook SBHLibrarySearchController
 - (void)viewDidLoad {
 	%orig;
@@ -818,13 +845,11 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)ale_refreshLibrarySearchDuringFolderAnimation {
 	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
-	ALESetLibrarySearchBackdropHiddenDuringFolderAnimation(YES);
 
 	if (ALELibraryFolderSearchRefreshTicks > 0) {
 		ALELibraryFolderSearchRefreshTicks--;
 		[self performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0.016];
 	} else {
-		ALESetLibrarySearchBackdropHiddenDuringFolderAnimation(NO);
 		ALELibraryFolderSearchRefreshScheduled = NO;
 	}
 }
