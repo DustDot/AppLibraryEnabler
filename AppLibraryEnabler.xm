@@ -105,6 +105,9 @@ struct SBHIconGridSize {
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
+static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
+static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
+static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -358,14 +361,6 @@ static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
 	return candidate == ancestor ? minY : 0;
 }
 
-static UIEdgeInsets ALEAdjustedContentInset(UIScrollView *scrollView) {
-	if ([scrollView respondsToSelector:@selector(adjustedContentInset)]) {
-		return scrollView.adjustedContentInset;
-	}
-
-	return scrollView.contentInset;
-}
-
 static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
 	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryCategoriesRootListView(listView) || columnCount == 0 || rowCount == 0) {
 		return;
@@ -373,8 +368,19 @@ static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView,
 
 	ALEUpdatingLibraryRootVisibility = YES;
 	@try {
+		if (ALELastLibraryRootVisibleListView != listView) {
+			ALELastLibraryRootVisibleListView = listView;
+			ALELastLibraryRootVisibleColumnRange = NSMakeRange(NSNotFound, 0);
+			ALELastLibraryRootVisibleRowRange = NSMakeRange(NSNotFound, 0);
+		}
+
 		NSRange visibleColumnRange = NSMakeRange(0, columnCount * 2);
 		NSRange visibleRowRange = NSMakeRange(0, rowCount * 2);
+		BOOL visibilityChanged = !NSEqualRanges(ALELastLibraryRootVisibleColumnRange, visibleColumnRange) || !NSEqualRanges(ALELastLibraryRootVisibleRowRange, visibleRowRange);
+
+		if (!visibilityChanged) {
+			return;
+		}
 
 		if ([listView respondsToSelector:@selector(setVisibleColumnRange:)]) {
 			listView.visibleColumnRange = visibleColumnRange;
@@ -385,6 +391,8 @@ static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView,
 		if ([listView respondsToSelector:@selector(showAllIcons)]) {
 			[listView showAllIcons];
 		}
+		ALELastLibraryRootVisibleColumnRange = visibleColumnRange;
+		ALELastLibraryRootVisibleRowRange = visibleRowRange;
 	} @finally {
 		ALEUpdatingLibraryRootVisibility = NO;
 	}
@@ -510,15 +518,6 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 		} @finally {
 			ALEUpdatingLibraryRootScrollRange = NO;
 		}
-	}
-
-	UIEdgeInsets adjustedInset = ALEAdjustedContentInset(scrollView);
-	CGFloat minimumOffsetY = -adjustedInset.top;
-	CGFloat maximumOffsetY = MAX(minimumOffsetY, contentSize.height - CGRectGetHeight(scrollView.bounds) + adjustedInset.bottom);
-	if (scrollView.contentOffset.y > maximumOffsetY) {
-		CGPoint contentOffset = scrollView.contentOffset;
-		contentOffset.y = maximumOffsetY;
-		scrollView.contentOffset = contentOffset;
 	}
 }
 
