@@ -18,6 +18,10 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
+@interface UIView (AppLibraryEnabler)
+- (id)_viewControllerForAncestor;
+@end
+
 @interface SBIconView : UIView
 @end
 
@@ -48,7 +52,6 @@
 
 @interface SBHLibraryPodFolderController (AppLibraryEnabler)
 + (id)iconLocation;
-- (void)ale_refreshLibrarySearchDuringFolderAnimation;
 @end
 
 @interface SBIconListGridLayoutConfiguration : NSObject
@@ -102,15 +105,6 @@ struct SBHIconGridSize {
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
-static CGRect ALELastLibraryRootSearchFrame = CGRectZero;
-static CGFloat ALELastLibraryRootListWidth = 0;
-static SBHLibrarySearchController *ALECurrentLibrarySearchController = nil;
-static NSInteger ALELibraryFolderSearchRefreshTicks = 0;
-static BOOL ALELibraryFolderSearchRefreshScheduled = NO;
-static BOOL ALELibrarySearchBarWasHidden = NO;
-static BOOL ALEHasLibrarySearchBarHiddenState = NO;
-
-static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -201,52 +195,10 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	}
 }
 
-static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]] || CGRectIsEmpty(ALELastLibraryRootSearchFrame) || ALELastLibraryRootListWidth <= 0) {
-		return;
-	}
-
-	UIView *searchSuperview = searchBar.superview;
-	if (![searchSuperview isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	CGFloat layoutWidth = CGRectGetWidth(ALECurrentLibrarySearchController.view.bounds);
-	if (layoutWidth <= 0) {
-		layoutWidth = CGRectGetWidth(searchSuperview.bounds);
-	}
-
-	CGFloat scale = layoutWidth / ALELastLibraryRootListWidth;
-	if (scale <= 0) {
-		scale = 1.0;
-	}
-
-	CGFloat targetWidth = round(CGRectGetWidth(ALELastLibraryRootSearchFrame) * scale);
-	CGFloat left = round((CGRectGetWidth(searchSuperview.bounds) - targetWidth) * 0.5);
-	CGFloat right = left + targetWidth;
-	CGFloat superviewWidth = CGRectGetWidth(searchSuperview.bounds);
-	if (right <= left || left < -1.0 || right > superviewWidth + 1.0) {
-		return;
-	}
-
-	CGRect searchFrame = searchBar.frame;
-	if (fabs(CGRectGetMinX(searchFrame) - left) <= 1.0 && fabs(CGRectGetWidth(searchFrame) - (right - left)) <= 1.0) {
-		return;
-	}
-
-	searchFrame.origin.x = left;
-	searchFrame.size.width = right - left;
-	searchBar.frame = searchFrame;
-	searchBar.clipsToBounds = YES;
-	searchBar.layer.masksToBounds = YES;
-}
-
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
 	if (!searchController.view) {
 		return;
 	}
-
-	ALECurrentLibrarySearchController = searchController;
 
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
 	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
@@ -258,43 +210,11 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
 
-	ALELayoutLibrarySearchBar(searchBar);
-
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
 		searchTextFieldHorizontalEdgeInsets.left = 23;
 		searchTextFieldHorizontalEdgeInsets.right = 23;
 		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
-	}
-}
-
-static void ALEStartLibraryFolderSearchRefresh(id controller) {
-	if (!controller) {
-		return;
-	}
-
-	ALELibraryFolderSearchRefreshTicks = 28;
-	if (!ALELibraryFolderSearchRefreshScheduled && [controller respondsToSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation)]) {
-		ALELibraryFolderSearchRefreshScheduled = YES;
-		[controller performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0];
-	}
-}
-
-static void ALESetLibrarySearchBarHiddenDuringFolderAnimation(BOOL hidden) {
-	SBHSearchBar *searchBar = ALEValueForKey(ALECurrentLibrarySearchController, @"_searchBar");
-	if (![searchBar isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	if (hidden) {
-		if (!ALEHasLibrarySearchBarHiddenState) {
-			ALELibrarySearchBarWasHidden = searchBar.hidden;
-			ALEHasLibrarySearchBarHiddenState = YES;
-		}
-		searchBar.hidden = YES;
-	} else if (ALEHasLibrarySearchBarHiddenState) {
-		searchBar.hidden = ALELibrarySearchBarWasHidden;
-		ALEHasLibrarySearchBarHiddenState = NO;
 	}
 }
 
@@ -438,6 +358,14 @@ static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
 	return candidate == ancestor ? minY : 0;
 }
 
+static UIEdgeInsets ALEAdjustedContentInset(UIScrollView *scrollView) {
+	if ([scrollView respondsToSelector:@selector(adjustedContentInset)]) {
+		return scrollView.adjustedContentInset;
+	}
+
+	return scrollView.contentInset;
+}
+
 static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
 	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryCategoriesRootListView(listView) || columnCount == 0 || rowCount == 0) {
 		return;
@@ -533,10 +461,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 
 	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
-	CGFloat contentMinX = horizontalInset;
-	CGFloat contentMaxX = horizontalInset + ((podWidth + columnGap) * MAX((NSInteger)columnCount - 1, 0)) + podWidth;
-	ALELastLibraryRootListWidth = listWidth;
-	ALELastLibraryRootSearchFrame = CGRectMake(0, 0, contentMaxX - contentMinX, 1);
 
 	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
 	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
@@ -586,6 +510,15 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 		} @finally {
 			ALEUpdatingLibraryRootScrollRange = NO;
 		}
+	}
+
+	UIEdgeInsets adjustedInset = ALEAdjustedContentInset(scrollView);
+	CGFloat minimumOffsetY = -adjustedInset.top;
+	CGFloat maximumOffsetY = MAX(minimumOffsetY, contentSize.height - CGRectGetHeight(scrollView.bounds) + adjustedInset.bottom);
+	if (scrollView.contentOffset.y > maximumOffsetY) {
+		CGPoint contentOffset = scrollView.contentOffset;
+		contentOffset.y = maximumOffsetY;
+		scrollView.contentOffset = contentOffset;
 	}
 }
 
@@ -797,37 +730,11 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibraryPodFolderController
-- (void)viewWillAppear:(bool)arg1 {
-	%orig;
-	ALEStartLibraryFolderSearchRefresh(self);
-}
-- (void)viewWillLayoutSubviews {
-	%orig;
-	ALEStartLibraryFolderSearchRefresh(self);
-}
-- (void)viewDidLayoutSubviews {
-	%orig;
-	ALEStartLibraryFolderSearchRefresh(self);
-}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALEStartLibraryFolderSearchRefresh(self);
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
-}
-- (void)ale_refreshLibrarySearchDuringFolderAnimation {
-	ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
-	ALESetLibrarySearchBarHiddenDuringFolderAnimation(YES);
-
-	if (ALELibraryFolderSearchRefreshTicks > 0) {
-		ALELibraryFolderSearchRefreshTicks--;
-		[self performSelector:@selector(ale_refreshLibrarySearchDuringFolderAnimation) withObject:nil afterDelay:0.016];
-	} else {
-		ALESetLibrarySearchBarHiddenDuringFolderAnimation(NO);
-		ALELayoutLibrarySearchController(ALECurrentLibrarySearchController);
-		ALELibraryFolderSearchRefreshScheduled = NO;
-	}
 }
 %end
 
