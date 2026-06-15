@@ -117,6 +117,8 @@ static UIWindow *ALELockedLibrarySearchBarWindow = nil;
 static BOOL ALELockedLibrarySearchBarLandscape = NO;
 static BOOL ALELibrarySearchControllerAppeared = NO;
 
+static BOOL ALEIsLandscapeScreen(void);
+
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
