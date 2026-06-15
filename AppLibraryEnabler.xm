@@ -42,10 +42,6 @@
 @interface SBHLibrarySearchController : UIViewController
 @end
 
-@interface SBHLibrarySearchController (AppLibraryEnabler)
-- (void)ale_layoutLibrarySearchBarOnce;
-@end
-
 @interface SBNestingViewController : UIViewController
 @end
 @interface SBFolderController : SBNestingViewController
@@ -559,6 +555,7 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		CGRect screenFrame = [listView convertRect:gridFrame toView:nil];
 		ALELastLibraryRootGridScreenMinX = CGRectGetMinX(screenFrame);
 		ALELastLibraryRootGridScreenMaxX = CGRectGetMaxX(screenFrame);
+		ALELayoutLibrarySearchBar(ALELastLibrarySearchBar);
 	}
 
 	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
@@ -774,6 +771,21 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 %end
 
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)setBounds:(CGRect)bounds {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+- (void)layoutSubviews {
+	%orig;
+	ALELayoutLibrarySearchBar(self);
+}
+%end
+
 %hook SBHomeScreenOverlayViewController
 - (CGFloat)contentWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
@@ -806,15 +818,6 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibrarySearchController
-%new
-- (void)ale_layoutLibrarySearchBarOnce {
-	ALELibrarySearchControllerAppeared = YES;
-	SBHSearchBar *searchBar = ALEValueForKey(self, @"_searchBar");
-	if ([searchBar isKindOfClass:[UIView class]]) {
-		ALELastLibrarySearchBar = searchBar;
-		ALELayoutLibrarySearchBar(searchBar);
-	}
-}
 - (void)viewDidLoad {
 	%orig;
 	ALELibrarySearchControllerAppeared = NO;
@@ -831,13 +834,10 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	%orig;
 	ALELibrarySearchControllerAppeared = YES;
 	ALELayoutLibrarySearchController(self);
-	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(ale_layoutLibrarySearchBarOnce) object:nil];
-	[self performSelector:@selector(ale_layoutLibrarySearchBarOnce) withObject:nil afterDelay:0.05];
 }
 - (void)viewWillDisappear:(bool)arg1 {
 	%orig;
 	ALELibrarySearchControllerAppeared = NO;
-	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(ale_layoutLibrarySearchBarOnce) object:nil];
 }
 - (void)viewWillLayoutSubviews {
 	%orig;
