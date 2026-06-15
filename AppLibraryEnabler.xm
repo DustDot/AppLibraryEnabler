@@ -262,15 +262,17 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
-static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGridSize originalGridSize) {
+static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGridSize originalGridSize, NSUInteger iconCount) {
 	struct SBHIconGridSize gridSize = originalGridSize;
 
 	if (ALEIsLandscapeScreen()) {
 		gridSize.columns = MAX(gridSize.columns, 8);
-		gridSize.rows = MAX(gridSize.rows, 4);
+		NSUInteger podRows = iconCount > 0 ? ((iconCount + 3) / 4) : 2;
+		gridSize.rows = MAX(gridSize.rows, (unsigned short)MAX((NSUInteger)4, podRows * 2));
 	} else {
 		gridSize.columns = MAX(gridSize.columns, 6);
-		gridSize.rows = MAX(gridSize.rows, 6);
+		NSUInteger podRows = iconCount > 0 ? ((iconCount + 2) / 3) : 3;
+		gridSize.rows = MAX(gridSize.rows, (unsigned short)MAX((NSUInteger)6, podRows * 2));
 	}
 
 	return gridSize;
@@ -574,7 +576,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (struct SBHIconGridSize)listGridSize {
 	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self)) {
-		return ALELibraryCategoriesRootGridSize(gridSize);
+		return ALELibraryCategoriesRootGridSize(gridSize, 0);
 	}
 
 	return gridSize;
@@ -585,7 +587,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (struct SBHIconGridSize)gridSize {
 	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALELibraryCategoriesRootGridSize(gridSize);
+		return ALELibraryCategoriesRootGridSize(gridSize, self.numberOfIcons);
 	}
 
 	return gridSize;
@@ -593,7 +595,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
 	id gridCellInfo = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(gridSize);
+		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(gridSize, self.numberOfIcons);
 		ALEReflowLibraryCategoriesRootGridCellInfo((SBIconListGridCellInfo *)gridCellInfo, self.numberOfIcons, rootGridSize);
 	}
 
