@@ -550,8 +550,12 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	CGFloat gridLeft = horizontalInset;
 	CGFloat gridRight = horizontalInset + (podWidth * columnCount) + (columnGap * MAX((NSInteger)columnCount - 1, 0));
 	if (listView.window && gridRight > gridLeft) {
-		CGRect gridFrame = CGRectMake(gridLeft, 0, gridRight - gridLeft, 1);
-		ALELastLibraryRootGridFrameInWindow = [listView convertRect:gridFrame toView:nil];
+		CGFloat windowWidth = CGRectGetWidth(listView.window.bounds);
+		if (windowWidth <= 0) {
+			windowWidth = CGRectGetWidth([UIScreen mainScreen].bounds);
+		}
+		CGFloat listX = (windowWidth - listWidth) / 2.0;
+		ALELastLibraryRootGridFrameInWindow = CGRectMake(listX + gridLeft, 0, gridRight - gridLeft, 1);
 		ALELastLibraryRootGridWindow = listView.window;
 		ALELayoutLibrarySearchBar(ALELastLibrarySearchBar);
 	}
