@@ -114,6 +114,7 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
+static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
@@ -266,7 +267,7 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 }
 
 static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame) {
-	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return frame;
 	}
 
@@ -282,7 +283,7 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 }
 
 static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint center) {
-	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return center;
 	}
 
@@ -297,7 +298,7 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 }
 
 static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
-	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return bounds;
 	}
 
@@ -312,25 +313,31 @@ static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bound
 }
 
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
-	if (searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return;
-	}
-
-	CGRect targetBounds = ALELibrarySearchTargetBounds(searchBar, searchBar.bounds);
-	if (fabs(CGRectGetWidth(searchBar.bounds) - CGRectGetWidth(targetBounds)) > 0.5) {
-		[searchBar setBounds:targetBounds];
 	}
 
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
 	BOOL frameNeedsUpdate = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(targetFrame)) > 0.5;
 	frameNeedsUpdate = frameNeedsUpdate || fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(targetFrame)) > 0.5;
-	if (frameNeedsUpdate) {
-		[searchBar setFrame:targetFrame];
-	}
 
 	CGPoint targetCenter = ALELibrarySearchTargetCenter(searchBar, searchBar.center);
-	if (fabs(searchBar.center.x - targetCenter.x) > 0.5) {
-		[searchBar setCenter:targetCenter];
+	BOOL centerNeedsUpdate = fabs(searchBar.center.x - targetCenter.x) > 0.5;
+	if (!frameNeedsUpdate && !centerNeedsUpdate) {
+		return;
+	}
+
+	ALEApplyingLibrarySearchBarLayout = YES;
+	@try {
+		if (frameNeedsUpdate) {
+			[searchBar setFrame:targetFrame];
+		}
+
+		if (centerNeedsUpdate) {
+			[searchBar setCenter:targetCenter];
+		}
+	} @finally {
+		ALEApplyingLibrarySearchBarLayout = NO;
 	}
 }
 
