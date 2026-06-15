@@ -111,6 +111,8 @@ static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGRect ALELastLibraryRootGridFrameInWindow = {{0, 0}, {0, 0}};
 static UIWindow *ALELastLibraryRootGridWindow = nil;
+static CGFloat ALELastLibraryRootGridMinXRatio = 0;
+static CGFloat ALELastLibraryRootGridMaxXRatio = 0;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -190,14 +192,14 @@ static void ALELayoutLibrarySearchBar(SBHSearchBar *searchBar) {
 		return;
 	}
 	ALELastLibrarySearchBar = searchBar;
-	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || CGRectGetWidth(ALELastLibraryRootGridFrameInWindow) <= 0) {
+	if (!searchBar.superview || !searchBar.window || searchBar.window != ALELastLibraryRootGridWindow || ALELastLibraryRootGridMaxXRatio <= ALELastLibraryRootGridMinXRatio) {
 		return;
 	}
 
-	CGRect targetFrame = [searchBar.superview convertRect:ALELastLibraryRootGridFrameInWindow fromView:nil];
+	CGFloat targetWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGRect frame = searchBar.frame;
-	frame.origin.x = CGRectGetMinX(targetFrame);
-	frame.size.width = CGRectGetWidth(targetFrame);
+	frame.origin.x = targetWidth * ALELastLibraryRootGridMinXRatio;
+	frame.size.width = targetWidth * (ALELastLibraryRootGridMaxXRatio - ALELastLibraryRootGridMinXRatio);
 
 	if (CGRectGetWidth(frame) <= 0 || (fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(frame)) <= 0.5 && fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(frame)) <= 0.5)) {
 		return;
@@ -447,21 +449,6 @@ static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
 	return candidate == ancestor ? minY : 0;
 }
 
-static CGFloat ALEStableLibraryRootLayoutWidth(SBIconListView *listView) {
-	CGFloat width = 0;
-	if (listView.window) {
-		width = CGRectGetWidth(listView.window.bounds);
-	}
-	if (width <= 0) {
-		width = CGRectGetWidth([UIScreen mainScreen].bounds);
-	}
-	if (width <= 0) {
-		width = ALEFullWidthForView(listView);
-	}
-
-	return width;
-}
-
 static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
 	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryCategoriesRootListView(listView) || columnCount == 0 || rowCount == 0) {
 		return;
@@ -565,22 +552,15 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 	CGFloat gridLeft = horizontalInset;
 	CGFloat gridRight = horizontalInset + (podWidth * columnCount) + (columnGap * MAX((NSInteger)columnCount - 1, 0));
 	if (listView.window && gridRight > gridLeft) {
-		CGFloat stableWidth = ALEStableLibraryRootLayoutWidth(listView);
-		CGFloat stableHorizontalInset = landscape ? MAX((CGFloat)122.0, stableWidth * 0.075) : MAX((CGFloat)72.0, stableWidth * 0.085);
-		CGFloat stableAvailableWidth = stableWidth - (stableHorizontalInset * 2.0);
-		if (stableAvailableWidth < (podWidth * columnCount)) {
-			stableHorizontalInset = 36.0;
-			stableAvailableWidth = stableWidth - (stableHorizontalInset * 2.0);
-		}
-		CGFloat stableColumnGap = columnCount > 1 ? (stableAvailableWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
-		if (stableColumnGap < 24.0) {
-			stableColumnGap = 24.0;
-		}
-		CGFloat stableGridLeft = stableHorizontalInset;
-		CGFloat stableGridRight = stableHorizontalInset + (podWidth * columnCount) + (stableColumnGap * MAX((NSInteger)columnCount - 1, 0));
-		CGFloat stableListX = (CGRectGetWidth(listView.window.bounds) - stableWidth) / 2.0;
-		ALELastLibraryRootGridFrameInWindow = CGRectMake(stableListX + stableGridLeft, 0, stableGridRight - stableGridLeft, 1);
+		CGRect gridFrame = CGRectMake(gridLeft, 0, gridRight - gridLeft, 1);
+		ALELastLibraryRootGridFrameInWindow = [listView convertRect:gridFrame toView:nil];
 		ALELastLibraryRootGridWindow = listView.window;
+		CGFloat stableWidth = CGRectGetWidth(listView.window.bounds);
+		BOOL listWidthIsStable = stableWidth <= 0 || fabs(listWidth - stableWidth) <= 2.0;
+		if (listWidth > 0 && listWidthIsStable) {
+			ALELastLibraryRootGridMinXRatio = gridLeft / listWidth;
+			ALELastLibraryRootGridMaxXRatio = gridRight / listWidth;
+		}
 		ALELayoutLibrarySearchBar(ALELastLibrarySearchBar);
 	}
 
