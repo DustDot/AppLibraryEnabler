@@ -240,7 +240,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[containerView setFrame:fullFrame];
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
-	if (ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
+	if ((ALELibrarySearchIsActive() || ALELibrarySearchResultsAreVisible() || ALEViewContainsActiveTextField(searchBar)) && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = fullFrame;
 		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
 		gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
