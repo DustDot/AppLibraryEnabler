@@ -121,6 +121,7 @@ static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
+static BOOL ALEViewContainsEditingTextField(UIView *view);
 static CGFloat ALEVisibleCancelButtonMinX(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -419,6 +420,24 @@ static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetVie
 	return hasBounds;
 }
 
+static BOOL ALEViewContainsEditingTextField(UIView *view) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
+		return NO;
+	}
+
+	if ([view isKindOfClass:[UITextField class]] && [(UITextField *)view isEditing]) {
+		return YES;
+	}
+
+	for (UIView *subview in view.subviews) {
+		if (ALEViewContainsEditingTextField(subview)) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
 static CGFloat ALEVisibleCancelButtonMinXInView(UIView *view, UIView *targetView) {
 	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView) {
 		return CGFLOAT_MAX;
@@ -447,11 +466,6 @@ static CGFloat ALEVisibleCancelButtonMinX(SBHSearchBar *searchBar) {
 	return ALEVisibleCancelButtonMinXInView(searchBar.superview, searchBar);
 }
 
-static BOOL ALELibrarySearchCancelButtonIsVisible(SBHSearchBar *searchBar, CGRect visibleBounds) {
-	CGFloat cancelMinX = ALEVisibleCancelButtonMinX(searchBar);
-	return cancelMinX != CGFLOAT_MAX && cancelMinX > CGRectGetMidX(visibleBounds);
-}
-
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
 		return;
@@ -463,7 +477,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	}
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
-	if (ALELibrarySearchCancelButtonIsVisible(searchBar, visibleBounds)) {
+	if (ALEViewContainsEditingTextField(searchBar)) {
 		CGFloat cancelMinX = ALEVisibleCancelButtonMinX(searchBar);
 		CGFloat editingWidth = cancelMinX - 16.0;
 		if (editingWidth > 0 && editingWidth < targetWidth) {
