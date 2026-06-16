@@ -117,6 +117,7 @@ static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
+static CGFloat ALELibrarySearchActiveTargetWidth = 0;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
@@ -126,6 +127,7 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
 static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar);
+static void ALEScheduleLibrarySearchActiveTargetWidthUpdate(void);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -501,6 +503,29 @@ static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar) {
 	return ALELibrarySearchCancelButtonMinXInView(searchController.view, searchBar);
 }
 
+static void ALEUpdateLibrarySearchActiveTargetWidth(void) {
+	SBHSearchBar *searchBar = ALELastLibrarySearchBar;
+	if (![searchBar isKindOfClass:[UIView class]] || !ALELibrarySearchIsActive()) {
+		ALELibrarySearchActiveTargetWidth = 0;
+		return;
+	}
+
+	CGFloat cancelMinX = ALELibrarySearchCancelButtonMinX(searchBar);
+	if (cancelMinX != CGFLOAT_MAX && cancelMinX > 0) {
+		ALELibrarySearchActiveTargetWidth = cancelMinX - 12.0;
+		ALEApplyLibrarySearchBarLayout(searchBar);
+	}
+}
+
+static void ALEScheduleLibrarySearchActiveTargetWidthUpdate(void) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		ALEUpdateLibrarySearchActiveTargetWidth();
+	});
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+		ALEUpdateLibrarySearchActiveTargetWidth();
+	});
+}
+
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
 		return;
@@ -513,9 +538,8 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
 	if (ALELibrarySearchIsActive()) {
-		CGFloat cancelMinX = ALELibrarySearchCancelButtonMinX(searchBar);
-		if (cancelMinX != CGFLOAT_MAX && cancelMinX > 0) {
-			targetWidth = MIN(targetWidth, cancelMinX - 12.0);
+		if (ALELibrarySearchActiveTargetWidth > 0) {
+			targetWidth = MIN(targetWidth, ALELibrarySearchActiveTargetWidth);
 		} else {
 			targetWidth -= MAX((CGFloat)48.0, CGRectGetHeight(searchBar.bounds) * 1.35);
 		}
@@ -1137,7 +1161,11 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)setActive:(bool)active animated:(bool)animated {
 	%orig;
+	ALELibrarySearchActiveTargetWidth = 0;
 	ALELayoutLibrarySearchController(self);
+	if (active) {
+		ALEScheduleLibrarySearchActiveTargetWidthUpdate();
+	}
 }
 %end
 
