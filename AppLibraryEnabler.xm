@@ -122,8 +122,6 @@ static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static CGFloat ALEVisibleCancelButtonMinX(SBHSearchBar *searchBar);
-static void ALEScheduleLibrarySearchBarLayout(void);
-static void ALEScheduleLibrarySearchBarLayoutForView(UIView *view);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -421,62 +419,13 @@ static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetVie
 	return hasBounds;
 }
 
-static BOOL ALEStringLooksLikeCancel(NSString *string) {
-	if (![string isKindOfClass:[NSString class]] || string.length == 0) {
-		return NO;
-	}
-
-	return [string isEqualToString:@"取消"] || [string caseInsensitiveCompare:@"Cancel"] == NSOrderedSame;
-}
-
-static BOOL ALEViewLooksLikeCancelButton(UIView *view) {
-	if (![view isKindOfClass:[UIView class]]) {
-		return NO;
-	}
-
-	if (ALEStringLooksLikeCancel(view.accessibilityLabel)) {
-		return YES;
-	}
-
-	if ([view isKindOfClass:[UIButton class]]) {
-		NSString *title = [(UIButton *)view titleForState:UIControlStateNormal];
-		if (ALEStringLooksLikeCancel(title)) {
-			return YES;
-		}
-	}
-
-	if ([view isKindOfClass:[UILabel class]] && ALEStringLooksLikeCancel([(UILabel *)view text])) {
-		return YES;
-	}
-
-	for (UIView *subview in view.subviews) {
-		if (ALEViewLooksLikeCancelButton(subview)) {
-			return YES;
-		}
-	}
-
-	return NO;
-}
-
-static BOOL ALEViewIsInsideLibrarySearchBar(UIView *view) {
-	UIView *candidate = view;
-	while (candidate) {
-		if (candidate == ALELastLibrarySearchBar) {
-			return YES;
-		}
-		candidate = candidate.superview;
-	}
-
-	return NO;
-}
-
 static CGFloat ALEVisibleCancelButtonMinXInView(UIView *view, UIView *targetView) {
 	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView) {
 		return CGFLOAT_MAX;
 	}
 
 	CGFloat minX = CGFLOAT_MAX;
-	if (ALEViewLooksLikeCancelButton(view)) {
+	if ([view isKindOfClass:[UIButton class]]) {
 		CGRect frame = [view convertRect:view.bounds toView:targetView];
 		if (CGRectGetWidth(frame) > 12.0 && CGRectGetHeight(frame) > 12.0) {
 			minX = MIN(minX, CGRectGetMinX(frame));
@@ -501,18 +450,6 @@ static CGFloat ALEVisibleCancelButtonMinX(SBHSearchBar *searchBar) {
 static BOOL ALELibrarySearchCancelButtonIsVisible(SBHSearchBar *searchBar, CGRect visibleBounds) {
 	CGFloat cancelMinX = ALEVisibleCancelButtonMinX(searchBar);
 	return cancelMinX != CGFLOAT_MAX && cancelMinX > CGRectGetMidX(visibleBounds);
-}
-
-static void ALEScheduleLibrarySearchBarLayout(void) {
-	dispatch_async(dispatch_get_main_queue(), ^{
-		ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
-	});
-}
-
-static void ALEScheduleLibrarySearchBarLayoutForView(UIView *view) {
-	if (ALEViewIsInsideLibrarySearchBar(view)) {
-		ALEScheduleLibrarySearchBarLayout();
-	}
 }
 
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
@@ -1080,27 +1017,6 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (void)layoutSubviews {
 	%orig;
 	ALEApplyLibrarySearchBarLayout(self);
-}
-%end
-
-%hook UITextField
-- (BOOL)becomeFirstResponder {
-	BOOL result = %orig;
-	ALEScheduleLibrarySearchBarLayoutForView(self);
-	return result;
-}
-- (void)setText:(NSString *)text {
-	%orig;
-	ALEScheduleLibrarySearchBarLayoutForView(self);
-}
-- (void)layoutSubviews {
-	%orig;
-	ALEScheduleLibrarySearchBarLayoutForView(self);
-}
-- (BOOL)resignFirstResponder {
-	BOOL result = %orig;
-	ALEScheduleLibrarySearchBarLayoutForView(self);
-	return result;
 }
 %end
 
