@@ -126,6 +126,7 @@ static BOOL ALEHasLibraryRootGridWidth(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
+static BOOL ALEViewContainsActiveTextField(UIView *view);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -263,6 +264,27 @@ static BOOL ALELibrarySearchIsActive(void) {
 	}
 
 	return [searchController isActive];
+}
+
+static BOOL ALEViewContainsActiveTextField(UIView *view) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
+		return NO;
+	}
+
+	if ([view isKindOfClass:[UITextField class]]) {
+		UITextField *textField = (UITextField *)view;
+		if (textField.isEditing || textField.isFirstResponder) {
+			return YES;
+		}
+	}
+
+	for (UIView *subview in view.subviews) {
+		if (ALEViewContainsActiveTextField(subview)) {
+			return YES;
+		}
+	}
+
+	return NO;
 }
 
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame) {
@@ -470,7 +492,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchIsActive()) {
+	if (ALELibrarySearchIsActive() || ALEViewContainsActiveTextField(searchBar)) {
 		return;
 	}
 
