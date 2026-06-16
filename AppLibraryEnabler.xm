@@ -239,8 +239,8 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 	if (ALELibrarySearchIsPresented() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = fullFrame;
-		gridFrame.origin.x = ALELastLibraryRootGridMinX;
-		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame) - CGRectGetMinX(gridFrame), ALELastLibraryRootGridWidth);
+		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
+		gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
 
@@ -312,9 +312,10 @@ static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame,
 		BOOL spansFullWidth = width > CGRectGetWidth(gridFrame) + 20.0 && width <= CGRectGetWidth(fullFrame) + 20.0;
 		BOOL isResultContent = CGRectGetHeight(frame) > 80.0 && CGRectGetMaxY(frame) > 120.0;
 		if (spansFullWidth && isResultContent) {
-			frame.origin.x = 0;
-			frame.size.width = CGRectGetMaxX(gridFrame);
+			frame.origin.x = CGRectGetMinX(gridFrame);
+			frame.size.width = CGRectGetWidth(gridFrame);
 			[subview setFrame:frame];
+			continue;
 		}
 
 		ALEConstrainLibrarySearchResultsView(subview, gridFrame, fullFrame);
@@ -334,10 +335,6 @@ static BOOL ALEHasLibraryRootGridWidth(void) {
 }
 
 static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
-	if (ALELibrarySearchIsPresented()) {
-		return 0;
-	}
-
 	if (!ALEHasLibraryRootGridWidth() || referenceWidth <= 0) {
 		return 0;
 	}
