@@ -514,16 +514,18 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchIsActive() || (ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch()) || ALEViewContainsActiveTextField(searchBar)) {
-		return;
-	}
-
 	CGRect visibleBounds = CGRectMake(0, 0, 0, 0);
 	if (!ALELargestVisibleSubviewBoundsInView(searchBar, searchBar, &visibleBounds)) {
 		return;
 	}
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
+	CGFloat targetMinX = 0;
+	if (ALELibrarySearchIsActive() || (ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch()) || ALEViewContainsActiveTextField(searchBar)) {
+		CGFloat activeInset = CGRectGetHeight(visibleBounds) / 2.0;
+		targetMinX = activeInset;
+		targetWidth = CGRectGetWidth(searchBar.bounds) + activeInset;
+	}
 	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
 	if (targetWidth <= 0 || targetHeight <= 0) {
 		return;
@@ -542,7 +544,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		}
 
 		CGRect frame = subview.frame;
-		frame.origin.x = 0;
+		frame.origin.x = targetMinX;
 		frame.size.width = targetWidth;
 		[subview setFrame:frame];
 	}
