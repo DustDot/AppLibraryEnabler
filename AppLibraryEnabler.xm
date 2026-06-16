@@ -127,8 +127,6 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
 static BOOL ALELibrarySearchIsPresented(void);
-static BOOL ALELibrarySearchWidthLooksSystemManaged(CGFloat width);
-static BOOL ALELibrarySearchBarLooksSystemManaged(SBHSearchBar *searchBar);
 static BOOL ALEViewContainsActiveTextField(UIView *view);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
 
@@ -352,28 +350,8 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 	return targetWidth;
 }
 
-static BOOL ALELibrarySearchWidthLooksSystemManaged(CGFloat width) {
-	if (!ALEHasLibraryRootGridWidth()) {
-		return NO;
-	}
-
-	return width > ALELastLibraryRootGridWidth + 24.0;
-}
-
-static BOOL ALELibrarySearchBarLooksSystemManaged(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]]) {
-		return NO;
-	}
-
-	return ALELibrarySearchWidthLooksSystemManaged(CGRectGetWidth(searchBar.frame)) || ALELibrarySearchWidthLooksSystemManaged(CGRectGetWidth(searchBar.bounds));
-}
-
 static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
-		return frame;
-	}
-
-	if (ALELibrarySearchBarLooksSystemManaged(searchBar) || ALELibrarySearchWidthLooksSystemManaged(CGRectGetWidth(frame))) {
 		return frame;
 	}
 
@@ -393,10 +371,6 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 		return center;
 	}
 
-	if (ALELibrarySearchBarLooksSystemManaged(searchBar)) {
-		return center;
-	}
-
 	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
 	if (ALELibrarySearchTargetWidth(referenceWidth) <= 0) {
@@ -409,10 +383,6 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 
 static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
-		return bounds;
-	}
-
-	if (ALELibrarySearchBarLooksSystemManaged(searchBar) || ALELibrarySearchWidthLooksSystemManaged(CGRectGetWidth(bounds))) {
 		return bounds;
 	}
 
@@ -539,7 +509,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchIsPresented() || ALELibrarySearchBarLooksSystemManaged(searchBar)) {
+	if (ALELibrarySearchIsPresented()) {
 		return;
 	}
 
