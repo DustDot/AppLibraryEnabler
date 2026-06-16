@@ -120,6 +120,7 @@ static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
+static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -334,6 +335,7 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	BOOL centerNeedsUpdate = fabs(searchBar.center.x - targetCenter.x) > 0.5;
 	BOOL transformNeedsUpdate = ALELibraryPodFolderPresentedOrAnimating && !CGAffineTransformIsIdentity(searchBar.transform);
 	if (!frameNeedsUpdate && !centerNeedsUpdate && !transformNeedsUpdate) {
+		ALELayoutLibrarySearchBarVisibleContent(searchBar);
 		return;
 	}
 
@@ -350,6 +352,8 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 		if (transformNeedsUpdate) {
 			[searchBar setTransform:CGAffineTransformIdentity];
 		}
+
+		ALELayoutLibrarySearchBarVisibleContent(searchBar);
 	} @finally {
 		ALEApplyingLibrarySearchBarLayout = NO;
 	}
@@ -363,6 +367,90 @@ static void ALEBeginLibraryPodFolderPresentation(void) {
 static void ALEEndLibraryPodFolderPresentation(void) {
 	ALELibraryPodFolderPresentedOrAnimating = NO;
 	ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
+}
+
+static BOOL ALEUnionVisibleBoundsInView(UIView *view, UIView *targetView, CGRect *bounds) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView || !bounds) {
+		return NO;
+	}
+
+	BOOL hasBounds = NO;
+	CGRect viewBounds = [view convertRect:view.bounds toView:targetView];
+	if (CGRectGetWidth(viewBounds) > 1.0 && CGRectGetHeight(viewBounds) > 1.0) {
+		*bounds = viewBounds;
+		hasBounds = YES;
+	}
+
+	for (UIView *subview in view.subviews) {
+		CGRect subviewBounds = CGRectMake(0, 0, 0, 0);
+		if (!ALEUnionVisibleBoundsInView(subview, targetView, &subviewBounds)) {
+			continue;
+		}
+
+		*bounds = hasBounds ? CGRectUnion(*bounds, subviewBounds) : subviewBounds;
+		hasBounds = YES;
+	}
+
+	return hasBounds;
+}
+
+static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetView, CGRect *bounds) {
+	if (![view isKindOfClass:[UIView class]] || !targetView || !bounds) {
+		return NO;
+	}
+
+	BOOL hasBounds = NO;
+	CGFloat largestArea = 0;
+	for (UIView *subview in view.subviews) {
+		CGRect subviewBounds = CGRectMake(0, 0, 0, 0);
+		if (!ALEUnionVisibleBoundsInView(subview, targetView, &subviewBounds)) {
+			continue;
+		}
+
+		CGFloat area = CGRectGetWidth(subviewBounds) * CGRectGetHeight(subviewBounds);
+		if (area > largestArea) {
+			*bounds = subviewBounds;
+			largestArea = area;
+			hasBounds = YES;
+		}
+	}
+
+	return hasBounds;
+}
+
+static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
+		return;
+	}
+
+	CGRect visibleBounds = CGRectMake(0, 0, 0, 0);
+	if (!ALELargestVisibleSubviewBoundsInView(searchBar, searchBar, &visibleBounds)) {
+		return;
+	}
+
+	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
+	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
+	if (targetWidth <= 0 || targetHeight <= 0) {
+		return;
+	}
+
+	for (UIView *subview in searchBar.subviews) {
+		CGRect subviewBounds = CGRectMake(0, 0, 0, 0);
+		if (!ALEUnionVisibleBoundsInView(subview, searchBar, &subviewBounds)) {
+			continue;
+		}
+
+		CGFloat widthDelta = fabs(CGRectGetWidth(subviewBounds) - CGRectGetWidth(visibleBounds));
+		CGFloat heightDelta = fabs(CGRectGetHeight(subviewBounds) - CGRectGetHeight(visibleBounds));
+		if (widthDelta > 1.0 || heightDelta > 1.0) {
+			continue;
+		}
+
+		CGRect frame = subview.frame;
+		frame.origin.x = 0;
+		frame.size.width = targetWidth;
+		[subview setFrame:frame];
+	}
 }
 
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL libraryRootLayout) {
