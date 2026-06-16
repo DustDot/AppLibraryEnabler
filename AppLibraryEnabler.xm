@@ -121,6 +121,7 @@ static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
+static BOOL ALELibrarySearchBarIsEditing(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -256,6 +257,10 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 		return 0;
 	}
 
+	if (ALELibrarySearchBarIsEditing(ALELastLibrarySearchBar)) {
+		return 0;
+	}
+
 	CGFloat targetWidth = ALELastLibraryRootGridWidth;
 	if (targetWidth <= 0) {
 		return 0;
@@ -297,6 +302,10 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 
 static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return bounds;
+	}
+
+	if (ALELibrarySearchBarIsEditing(searchBar)) {
 		return bounds;
 	}
 
@@ -418,8 +427,38 @@ static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetVie
 	return hasBounds;
 }
 
+static BOOL ALEViewContainsEditingSearchControl(UIView *view) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
+		return NO;
+	}
+
+	if ([view isKindOfClass:[UITextField class]] && [(UITextField *)view isEditing]) {
+		return YES;
+	}
+
+	for (UIView *subview in view.subviews) {
+		if (ALEViewContainsEditingSearchControl(subview)) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
+static BOOL ALELibrarySearchBarIsEditing(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]]) {
+		return NO;
+	}
+
+	return ALEViewContainsEditingSearchControl(searchBar);
+}
+
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
+		return;
+	}
+
+	if (ALELibrarySearchBarIsEditing(searchBar)) {
 		return;
 	}
 
