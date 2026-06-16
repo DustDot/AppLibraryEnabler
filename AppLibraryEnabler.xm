@@ -547,9 +547,8 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	CGFloat targetMinX = 0;
 	if (ALELibrarySearchIsActive()) {
 		CGFloat activeInset = CGRectGetHeight(visibleBounds) / 2.0;
-		targetMinX = activeInset;
 		if (ALELibrarySearchActiveTargetWidth > 0) {
-			targetWidth = MIN(ALELibrarySearchActiveTargetWidth - targetMinX, CGRectGetWidth(searchBar.bounds) + activeInset);
+			targetWidth = MIN(ALELibrarySearchActiveTargetWidth, CGRectGetWidth(searchBar.bounds) + activeInset);
 		} else {
 			targetWidth = CGRectGetWidth(searchBar.bounds) + activeInset;
 		}
