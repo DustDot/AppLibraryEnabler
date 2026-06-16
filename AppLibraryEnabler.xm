@@ -16,6 +16,7 @@
 
 
 #import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
 @interface UIView (AppLibraryEnabler)
@@ -117,6 +118,7 @@ static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
+static UIView *ALELastLibrarySearchCancelView = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
@@ -126,6 +128,8 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
 static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar);
+static void ALEScheduleLibrarySearchBarLayoutAfterDelay(NSTimeInterval delay);
+static void ALEScheduleLibrarySearchBarLayoutDuringAnimation(void);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -256,6 +260,20 @@ static BOOL ALELibrarySearchIsActive(void) {
 	}
 
 	return [searchController isActive];
+}
+
+static void ALEScheduleLibrarySearchBarLayoutAfterDelay(NSTimeInterval delay) {
+	dispatch_time_t dispatchTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC));
+	dispatch_after(dispatchTime, dispatch_get_main_queue(), ^{
+		ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
+	});
+}
+
+static void ALEScheduleLibrarySearchBarLayoutDuringAnimation(void) {
+	NSTimeInterval delays[] = {0.0, 0.05, 0.1, 0.16, 0.22, 0.3, 0.38};
+	for (NSUInteger index = 0; index < sizeof(delays) / sizeof(delays[0]); index++) {
+		ALEScheduleLibrarySearchBarLayoutAfterDelay(delays[index]);
+	}
 }
 
 static BOOL ALEHasLibraryRootGridWidth(void) {
@@ -468,6 +486,20 @@ static BOOL ALEViewLooksLikeCancelButton(UIView *view) {
 	return NO;
 }
 
+static CGRect ALEPresentationBoundsOfViewInView(UIView *view, UIView *targetView) {
+	if (![view isKindOfClass:[UIView class]] || !targetView) {
+		return CGRectMake(0, 0, 0, 0);
+	}
+
+	CALayer *presentationLayer = view.layer.presentationLayer;
+	CALayer *targetPresentationLayer = targetView.layer.presentationLayer ?: targetView.layer;
+	if (presentationLayer && targetPresentationLayer) {
+		return [targetPresentationLayer convertRect:presentationLayer.bounds fromLayer:presentationLayer];
+	}
+
+	return [view convertRect:view.bounds toView:targetView];
+}
+
 static CGFloat ALELibrarySearchCancelButtonMinXInView(UIView *view, UIView *targetView) {
 	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView) {
 		return CGFLOAT_MAX;
@@ -475,7 +507,8 @@ static CGFloat ALELibrarySearchCancelButtonMinXInView(UIView *view, UIView *targ
 
 	CGFloat minX = CGFLOAT_MAX;
 	if (ALEViewLooksLikeCancelButton(view)) {
-		CGRect frame = [view convertRect:view.bounds toView:targetView];
+		ALELastLibrarySearchCancelView = view;
+		CGRect frame = ALEPresentationBoundsOfViewInView(view, targetView);
 		if (CGRectGetWidth(frame) > 12.0 && CGRectGetHeight(frame) > 12.0) {
 			minX = MIN(minX, CGRectGetMinX(frame));
 		}
@@ -483,6 +516,24 @@ static CGFloat ALELibrarySearchCancelButtonMinXInView(UIView *view, UIView *targ
 
 	for (UIView *subview in view.subviews) {
 		minX = MIN(minX, ALELibrarySearchCancelButtonMinXInView(subview, targetView));
+	}
+
+	return minX;
+}
+
+static CGFloat ALELikelyCancelButtonMinXInView(UIView *view, UIView *targetView) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView) {
+		return CGFLOAT_MAX;
+	}
+
+	CGFloat minX = CGFLOAT_MAX;
+	CGRect frame = ALEPresentationBoundsOfViewInView(view, targetView);
+	if (CGRectGetMinX(frame) > CGRectGetWidth(targetView.bounds) * 0.65 && CGRectGetWidth(frame) > 24.0 && CGRectGetWidth(frame) < 140.0 && CGRectGetHeight(frame) > 12.0 && CGRectGetHeight(frame) < 80.0) {
+		minX = CGRectGetMinX(frame);
+	}
+
+	for (UIView *subview in view.subviews) {
+		minX = MIN(minX, ALELikelyCancelButtonMinXInView(subview, targetView));
 	}
 
 	return minX;
@@ -498,7 +549,12 @@ static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar) {
 		return CGFLOAT_MAX;
 	}
 
-	return ALELibrarySearchCancelButtonMinXInView(searchController.view, searchBar);
+	ALELastLibrarySearchCancelView = nil;
+	CGFloat cancelMinX = ALELibrarySearchCancelButtonMinXInView(searchController.view, searchBar);
+	if (cancelMinX == CGFLOAT_MAX) {
+		cancelMinX = ALELikelyCancelButtonMinXInView(searchController.view, searchBar);
+	}
+	return cancelMinX;
 }
 
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
@@ -1138,6 +1194,9 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 - (void)setActive:(bool)active animated:(bool)animated {
 	%orig;
 	ALELayoutLibrarySearchController(self);
+	if (animated) {
+		ALEScheduleLibrarySearchBarLayoutDuringAnimation();
+	}
 }
 %end
 
