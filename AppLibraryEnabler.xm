@@ -113,7 +113,6 @@ static SBIconListView *ALELastLibraryRootVisibleListView = nil;
 static CGFloat ALELastLibraryRootGridMinX = 0;
 static CGFloat ALELastLibraryRootGridWidth = 0;
 static CGFloat ALELastLibraryRootListWidth = 0;
-static CGRect ALELastLibraryRootGridFrameInWindow = CGRectZero;
 static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
@@ -124,8 +123,6 @@ static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static BOOL ALEHasLibraryRootGridWidth(void);
-static BOOL ALELibraryRootGridFrameInView(UIView *view, CGRect *frame);
-static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
@@ -244,16 +241,8 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 	if (ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = fullFrame;
-		CGRect rootGridFrame = CGRectZero;
-		if (ALELibraryRootGridFrameInView(searchController.view, &rootGridFrame)) {
-			CGFloat gridMinX = MIN(MAX((CGFloat)0, CGRectGetMinX(rootGridFrame)), CGRectGetWidth(fullFrame));
-			CGFloat gridWidth = MIN(CGRectGetWidth(fullFrame) - gridMinX, CGRectGetWidth(rootGridFrame));
-			gridFrame.origin.x = gridMinX;
-			gridFrame.size.width = MAX((CGFloat)0, gridWidth);
-		} else {
-			gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
-			gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
-		}
+		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
+		gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
 
@@ -341,20 +330,6 @@ static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame,
 	}
 }
 
-static BOOL ALELibraryRootGridFrameInView(UIView *view, CGRect *frame) {
-	if (![view isKindOfClass:[UIView class]] || !view.window || !frame || CGRectIsEmpty(ALELastLibraryRootGridFrameInWindow)) {
-		return NO;
-	}
-
-	CGRect convertedFrame = [view.window convertRect:ALELastLibraryRootGridFrameInWindow toView:view];
-	if (CGRectGetWidth(convertedFrame) <= 0 || CGRectGetHeight(convertedFrame) <= 0) {
-		return NO;
-	}
-
-	*frame = convertedFrame;
-	return YES;
-}
-
 static BOOL ALEHasLibraryRootGridWidth(void) {
 	if (ALELastLibraryRootGridWidth <= 0 || ALELastLibraryRootListWidth <= 0) {
 		return NO;
@@ -388,13 +363,6 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
 	if (targetWidth <= 0) {
-		return frame;
-	}
-
-	CGRect rootGridFrame = CGRectZero;
-	if (ALELibraryRootGridFrameInView(searchBar.superview, &rootGridFrame)) {
-		frame.origin.x = CGRectGetMinX(rootGridFrame);
-		frame.size.width = CGRectGetWidth(rootGridFrame);
 		return frame;
 	}
 
@@ -901,7 +869,6 @@ static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) 
 		ALELastLibraryRootListWidth = listWidth;
 		ALELastLibraryRootColumnCount = columnCount;
 		ALELastLibraryRootLandscape = landscape;
-		ALELastLibraryRootGridFrameInWindow = [listView convertRect:CGRectMake(gridMinX, topY, gridMaxX - gridMinX, maxY - topY) toView:nil];
 		ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
 	}
 
