@@ -544,8 +544,10 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	}
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
+	CGFloat targetMinX = 0;
 	if (ALELibrarySearchIsActive()) {
 		if (ALELibrarySearchActiveTargetWidth > 0) {
+			targetMinX = MAX((CGFloat)0, (ALELibrarySearchActiveTargetWidth - targetWidth) / 2.0);
 			targetWidth = MIN(targetWidth, ALELibrarySearchActiveTargetWidth);
 		} else {
 			targetWidth -= MAX((CGFloat)48.0, CGRectGetHeight(searchBar.bounds) * 1.35);
@@ -569,7 +571,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		}
 
 		CGRect frame = subview.frame;
-		frame.origin.x = 0;
+		frame.origin.x = targetMinX;
 		frame.size.width = targetWidth;
 		[subview setFrame:frame];
 	}
