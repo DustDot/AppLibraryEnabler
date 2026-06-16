@@ -514,7 +514,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchIsActive() || (ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch()) || ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibraryRootIsPulledForSearch() && (ALELibrarySearchIsActive() || ALELibrarySearchResultsAreVisible() || ALEViewContainsActiveTextField(searchBar))) {
 		return;
 	}
 
