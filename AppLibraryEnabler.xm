@@ -133,6 +133,8 @@ static BOOL ALELibrarySearchBarLooksSearchTransition(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchWidthLooksSearchTransition(SBHSearchBar *searchBar, CGFloat width);
 static BOOL ALEViewContainsActiveTextField(UIView *view);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
+static void ALEConstrainLibrarySearchHeaderView(UIView *view, CGRect gridFrame, CGRect fullFrame);
+static void ALEConstrainLibrarySearchBarAncestor(SBHSearchBar *searchBar, UIView *boundaryView, CGRect gridFrame, CGRect fullFrame);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -246,6 +248,10 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		CGRect gridFrame = fullFrame;
 		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
 		gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
+		if (ALELibrarySearchShouldDeferSearchBarFrame()) {
+			ALEConstrainLibrarySearchHeaderView(contentContainerView, gridFrame, fullFrame);
+			ALEConstrainLibrarySearchBarAncestor(searchBar, searchController.view, gridFrame, fullFrame);
+		}
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
 
@@ -332,6 +338,61 @@ static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame,
 		}
 
 		ALEConstrainLibrarySearchResultsView(subview, gridFrame, fullFrame);
+	}
+}
+
+static void ALEConstrainLibrarySearchHeaderView(UIView *view, CGRect gridFrame, CGRect fullFrame) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
+		return;
+	}
+
+	for (UIView *subview in view.subviews) {
+		CGRect frame = subview.frame;
+		CGFloat width = CGRectGetWidth(frame);
+		CGFloat height = CGRectGetHeight(frame);
+		BOOL spansFullWidth = width > CGRectGetWidth(gridFrame) + 20.0 && width <= CGRectGetWidth(fullFrame) + 20.0;
+		BOOL isHeaderContent = height > 24.0 && height < 180.0 && CGRectGetMinY(frame) < 220.0;
+		if (spansFullWidth && isHeaderContent) {
+			frame.origin.x = CGRectGetMinX(gridFrame);
+			frame.size.width = CGRectGetWidth(gridFrame);
+			[subview setFrame:frame];
+			continue;
+		}
+
+		if (height < 260.0 || CGRectGetMinY(frame) < 260.0) {
+			ALEConstrainLibrarySearchHeaderView(subview, gridFrame, fullFrame);
+		}
+	}
+}
+
+static void ALEConstrainLibrarySearchBarAncestor(SBHSearchBar *searchBar, UIView *boundaryView, CGRect gridFrame, CGRect fullFrame) {
+	if (![searchBar isKindOfClass:[UIView class]] || ![boundaryView isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	UIView *view = searchBar.superview;
+	while ([view isKindOfClass:[UIView class]] && view != boundaryView) {
+		UIView *superview = view.superview;
+		if (![superview isKindOfClass:[UIView class]]) {
+			break;
+		}
+
+		CGRect frameInBoundary = [superview convertRect:view.frame toView:boundaryView];
+		CGRect searchFrame = [searchBar convertRect:searchBar.bounds toView:boundaryView];
+		CGFloat width = CGRectGetWidth(frameInBoundary);
+		CGFloat height = CGRectGetHeight(frameInBoundary);
+		BOOL spansFullWidth = width > CGRectGetWidth(gridFrame) + 20.0 && width <= CGRectGetWidth(fullFrame) + 20.0;
+		BOOL isSearchHeader = height > 24.0 && height < 180.0 && CGRectIntersectsRect(frameInBoundary, searchFrame) && CGRectGetMinY(frameInBoundary) < 220.0;
+		if (spansFullWidth && isSearchHeader) {
+			CGRect targetFrame = [boundaryView convertRect:gridFrame toView:superview];
+			CGRect frame = view.frame;
+			frame.origin.x = CGRectGetMinX(targetFrame);
+			frame.size.width = CGRectGetWidth(targetFrame);
+			[view setFrame:frame];
+			return;
+		}
+
+		view = superview;
 	}
 }
 
@@ -565,22 +626,16 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
+	if (ALELibrarySearchIsActive() || ALEViewContainsActiveTextField(searchBar)) {
+		return;
+	}
+
 	CGRect visibleBounds = CGRectMake(0, 0, 0, 0);
 	if (!ALELargestVisibleSubviewBoundsInView(searchBar, searchBar, &visibleBounds)) {
 		return;
 	}
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
-	CGFloat targetMinX = 0;
-	if (searchBar.superview && ALELastLibraryRootGridWidth > 0) {
-		CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
-		CGFloat gridMinX = (referenceWidth - targetWidth) / 2.0;
-		targetMinX = gridMinX - CGRectGetMinX(searchBar.frame);
-		targetMinX = MAX((CGFloat)0, targetMinX);
-		if (targetMinX + targetWidth > CGRectGetWidth(searchBar.bounds)) {
-			targetWidth = CGRectGetWidth(searchBar.bounds) - targetMinX;
-		}
-	}
 	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
 	if (targetWidth <= 0 || targetHeight <= 0) {
 		return;
@@ -599,7 +654,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		}
 
 		CGRect frame = subview.frame;
-		frame.origin.x = targetMinX;
+		frame.origin.x = 0;
 		frame.size.width = targetWidth;
 		[subview setFrame:frame];
 	}
