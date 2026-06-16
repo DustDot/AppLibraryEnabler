@@ -290,7 +290,7 @@ static BOOL ALELibrarySearchIsPresented(void) {
 }
 
 static BOOL ALELibrarySearchShouldDeferSearchBarFrame(void) {
-	return ALELibrarySearchTransitionPresented || ALELibrarySearchIsActive() || ALEViewContainsActiveTextField(ALELastLibrarySearchBar) || ALELibrarySearchBarLooksSearchTransition(ALELastLibrarySearchBar);
+	return ALELibrarySearchIsActive() || ALEViewContainsActiveTextField(ALELastLibrarySearchBar) || ALELibrarySearchBarLooksSearchTransition(ALELastLibrarySearchBar);
 }
 
 static BOOL ALEViewContainsActiveTextField(UIView *view) {
@@ -388,7 +388,6 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 	}
 
 	if (ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(frame))) {
-		ALELibrarySearchTransitionPresented = YES;
 		return frame;
 	}
 
@@ -413,7 +412,6 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 	}
 
 	if (ALELibrarySearchBarLooksSearchTransition(searchBar)) {
-		ALELibrarySearchTransitionPresented = YES;
 		return center;
 	}
 
@@ -437,7 +435,6 @@ static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bound
 	}
 
 	if (ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(bounds))) {
-		ALELibrarySearchTransitionPresented = YES;
 		return bounds;
 	}
 
