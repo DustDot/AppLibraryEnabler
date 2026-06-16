@@ -126,6 +126,7 @@ static BOOL ALEHasLibraryRootGridWidth(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
+static BOOL ALELibrarySearchResultsAreVisible(void);
 static BOOL ALEViewContainsActiveTextField(UIView *view);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
 
@@ -264,6 +265,16 @@ static BOOL ALELibrarySearchIsActive(void) {
 	}
 
 	return [searchController isActive];
+}
+
+static BOOL ALELibrarySearchResultsAreVisible(void) {
+	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
+	if (![searchController isKindOfClass:[UIViewController class]] || !searchController.view || searchController.view.hidden || searchController.view.alpha <= 0.01) {
+		return NO;
+	}
+
+	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
+	return [searchResultsContainerView isKindOfClass:[UIView class]] && !searchResultsContainerView.hidden && searchResultsContainerView.alpha > 0.01;
 }
 
 static BOOL ALEViewContainsActiveTextField(UIView *view) {
@@ -492,7 +503,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchIsActive() || ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibrarySearchIsActive() || ALELibrarySearchResultsAreVisible() || ALEViewContainsActiveTextField(searchBar)) {
 		return;
 	}
 
