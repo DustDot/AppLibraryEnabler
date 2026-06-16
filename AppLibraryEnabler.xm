@@ -116,14 +116,10 @@ static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
-static CGFloat ALELibrarySearchBarAlphaBeforeFolder = 1.0;
-static BOOL ALELibrarySearchBarHiddenBeforeFolder = NO;
-static BOOL ALELibrarySearchBarStateCapturedForFolder = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
-static void ALESetLibrarySearchBarHiddenForPodFolder(BOOL hidden);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -240,9 +236,6 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 
 	ALEApplyLibrarySearchBarLayout(searchBar);
-	if (ALELibraryPodFolderPresentedOrAnimating) {
-		ALESetLibrarySearchBarHiddenForPodFolder(YES);
-	}
 }
 
 static BOOL ALEHasLibraryRootGridWidth(void) {
@@ -320,6 +313,18 @@ static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bound
 	return bounds;
 }
 
+static CGAffineTransform ALELibrarySearchTargetTransform(SBHSearchBar *searchBar, CGAffineTransform transform) {
+	if (searchBar != ALELastLibrarySearchBar || !ALELibraryPodFolderPresentedOrAnimating) {
+		return transform;
+	}
+
+	transform.a = 1.0;
+	transform.b = 0;
+	transform.c = 0;
+	transform.d = 1.0;
+	return transform;
+}
+
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return;
@@ -331,7 +336,8 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 
 	CGPoint targetCenter = ALELibrarySearchTargetCenter(searchBar, searchBar.center);
 	BOOL centerNeedsUpdate = fabs(searchBar.center.x - targetCenter.x) > 0.5;
-	if (!frameNeedsUpdate && !centerNeedsUpdate) {
+	BOOL transformNeedsUpdate = ALELibraryPodFolderPresentedOrAnimating && !CGAffineTransformIsIdentity(searchBar.transform);
+	if (!frameNeedsUpdate && !centerNeedsUpdate && !transformNeedsUpdate) {
 		return;
 	}
 
@@ -344,46 +350,23 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 		if (centerNeedsUpdate) {
 			[searchBar setCenter:targetCenter];
 		}
+
+		if (transformNeedsUpdate) {
+			[searchBar setTransform:CGAffineTransformIdentity];
+		}
 	} @finally {
 		ALEApplyingLibrarySearchBarLayout = NO;
 	}
 }
 
-static void ALESetLibrarySearchBarHiddenForPodFolder(BOOL hidden) {
-	SBHSearchBar *searchBar = ALELastLibrarySearchBar;
-	if (![searchBar isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	if (hidden) {
-		if (!ALELibrarySearchBarStateCapturedForFolder) {
-			ALELibrarySearchBarAlphaBeforeFolder = searchBar.alpha;
-			ALELibrarySearchBarHiddenBeforeFolder = searchBar.hidden;
-			ALELibrarySearchBarStateCapturedForFolder = YES;
-		}
-		searchBar.hidden = YES;
-		searchBar.alpha = 0;
-		return;
-	}
-
-	if (!ALELibrarySearchBarStateCapturedForFolder) {
-		return;
-	}
-
-	searchBar.hidden = ALELibrarySearchBarHiddenBeforeFolder;
-	searchBar.alpha = ALELibrarySearchBarAlphaBeforeFolder;
-	ALELibrarySearchBarStateCapturedForFolder = NO;
-	ALEApplyLibrarySearchBarLayout(searchBar);
-}
-
 static void ALEBeginLibraryPodFolderPresentation(void) {
 	ALELibraryPodFolderPresentedOrAnimating = YES;
-	ALESetLibrarySearchBarHiddenForPodFolder(YES);
+	ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
 }
 
 static void ALEEndLibraryPodFolderPresentation(void) {
 	ALELibraryPodFolderPresentedOrAnimating = NO;
-	ALESetLibrarySearchBarHiddenForPodFolder(NO);
+	ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
 }
 
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL libraryRootLayout) {
@@ -902,6 +885,9 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 - (void)setCenter:(CGPoint)center {
 	%orig(ALELibrarySearchTargetCenter(self, center));
+}
+- (void)setTransform:(CGAffineTransform)transform {
+	%orig(ALELibrarySearchTargetTransform(self, transform));
 }
 - (void)layoutSubviews {
 	%orig;
