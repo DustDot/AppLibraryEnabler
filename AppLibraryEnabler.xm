@@ -125,6 +125,7 @@ static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
+static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -436,6 +437,70 @@ static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetVie
 	return hasBounds;
 }
 
+static BOOL ALEStringLooksLikeCancel(NSString *string) {
+	if (![string isKindOfClass:[NSString class]] || string.length == 0) {
+		return NO;
+	}
+
+	return [string isEqualToString:@"取消"] || [string caseInsensitiveCompare:@"Cancel"] == NSOrderedSame;
+}
+
+static BOOL ALEViewLooksLikeCancelButton(UIView *view) {
+	if (![view isKindOfClass:[UIView class]]) {
+		return NO;
+	}
+
+	if (ALEStringLooksLikeCancel(view.accessibilityLabel)) {
+		return YES;
+	}
+
+	if ([view isKindOfClass:[UIButton class]]) {
+		NSString *title = [(UIButton *)view titleForState:UIControlStateNormal];
+		if (ALEStringLooksLikeCancel(title)) {
+			return YES;
+		}
+	}
+
+	if ([view isKindOfClass:[UILabel class]]) {
+		return ALEStringLooksLikeCancel([(UILabel *)view text]);
+	}
+
+	return NO;
+}
+
+static CGFloat ALELibrarySearchCancelButtonMinXInView(UIView *view, UIView *targetView) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView) {
+		return CGFLOAT_MAX;
+	}
+
+	CGFloat minX = CGFLOAT_MAX;
+	if (ALEViewLooksLikeCancelButton(view)) {
+		CGRect frame = [view convertRect:view.bounds toView:targetView];
+		if (CGRectGetWidth(frame) > 12.0 && CGRectGetHeight(frame) > 12.0) {
+			minX = MIN(minX, CGRectGetMinX(frame));
+		}
+	}
+
+	for (UIView *subview in view.subviews) {
+		minX = MIN(minX, ALELibrarySearchCancelButtonMinXInView(subview, targetView));
+	}
+
+	return minX;
+}
+
+static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]]) {
+		return CGFLOAT_MAX;
+	}
+
+	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
+	if (![searchController isKindOfClass:[UIViewController class]] || !searchController.view) {
+		return CGFLOAT_MAX;
+	}
+
+	return ALELibrarySearchCancelButtonMinXInView(searchController.view, searchBar);
+}
+
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
 		return;
@@ -448,7 +513,12 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
 	if (ALELibrarySearchIsActive()) {
-		targetWidth -= MAX((CGFloat)48.0, CGRectGetHeight(searchBar.bounds) * 1.35);
+		CGFloat cancelMinX = ALELibrarySearchCancelButtonMinX(searchBar);
+		if (cancelMinX != CGFLOAT_MAX && cancelMinX > 0) {
+			targetWidth = MIN(targetWidth, cancelMinX - 12.0);
+		} else {
+			targetWidth -= MAX((CGFloat)48.0, CGRectGetHeight(searchBar.bounds) * 1.35);
+		}
 	}
 	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
 	if (targetWidth <= 0 || targetHeight <= 0) {
