@@ -127,7 +127,6 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
 static BOOL ALELibrarySearchShouldDeferSearchBarFrame(SBHSearchBar *searchBar);
-static BOOL ALELibrarySearchWidthLooksSearchTransition(SBHSearchBar *searchBar, CGFloat width);
 static BOOL ALEViewContainsActiveTextField(UIView *view);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
 
@@ -345,26 +344,12 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 	return targetWidth;
 }
 
-static BOOL ALELibrarySearchWidthLooksSearchTransition(SBHSearchBar *searchBar, CGFloat width) {
-	if (![searchBar isKindOfClass:[UIView class]] || !searchBar.superview || width <= 0) {
-		return NO;
-	}
-
-	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
-	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
-	if (targetWidth <= 0) {
-		return NO;
-	}
-
-	return width < targetWidth - 8.0 && width > targetWidth * 0.45;
-}
-
 static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
 		return frame;
 	}
 
-	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar) || ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(frame))) {
+	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar)) {
 		return frame;
 	}
 
@@ -384,7 +369,7 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 		return center;
 	}
 
-	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar) || ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(searchBar.frame))) {
+	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar)) {
 		return center;
 	}
 
@@ -403,7 +388,7 @@ static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bound
 		return bounds;
 	}
 
-	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar) || ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(bounds))) {
+	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar)) {
 		return bounds;
 	}
 
@@ -530,7 +515,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar) || ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(searchBar.frame)) || ALELibrarySearchWidthLooksSearchTransition(searchBar, CGRectGetWidth(searchBar.bounds))) {
+	if (ALELibrarySearchShouldDeferSearchBarFrame(searchBar)) {
 		return;
 	}
 
