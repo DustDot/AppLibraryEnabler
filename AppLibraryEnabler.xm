@@ -122,6 +122,7 @@ static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
+static BOOL ALEHasLibraryRootGridWidth(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
@@ -230,9 +231,14 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
 
 	CGRect fullFrame = searchController.view.bounds;
+	CGRect gridFrame = fullFrame;
+	if (ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
+		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
+		gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
+	}
 	[containerView setFrame:fullFrame];
-	[contentContainerView setFrame:fullFrame];
-	[searchResultsContainerView setFrame:fullFrame];
+	[contentContainerView setFrame:gridFrame];
+	[searchResultsContainerView setFrame:gridFrame];
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
