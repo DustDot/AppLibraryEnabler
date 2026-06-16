@@ -118,6 +118,7 @@ static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
+static CGRect ALELastLibrarySearchVisibleFrame = CGRectZero;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
@@ -241,8 +242,13 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 	if (ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = fullFrame;
-		gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
-		gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
+		if (!CGRectIsEmpty(ALELastLibrarySearchVisibleFrame) && CGRectGetWidth(ALELastLibrarySearchVisibleFrame) > 0) {
+			gridFrame.origin.x = CGRectGetMinX(ALELastLibrarySearchVisibleFrame);
+			gridFrame.size.width = MIN(CGRectGetWidth(fullFrame) - CGRectGetMinX(gridFrame), CGRectGetWidth(ALELastLibrarySearchVisibleFrame));
+		} else {
+			gridFrame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
+			gridFrame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(gridFrame)) / 2.0;
+		}
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
 
@@ -527,6 +533,13 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
 	if (targetWidth <= 0 || targetHeight <= 0) {
 		return;
+	}
+
+	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
+	if ([searchController isKindOfClass:[UIViewController class]] && searchController.view) {
+		ALELastLibrarySearchVisibleFrame = [searchBar convertRect:CGRectMake(0, 0, targetWidth, targetHeight) toView:searchController.view];
+	} else {
+		ALELastLibrarySearchVisibleFrame = CGRectMake(CGRectGetMinX(searchBar.frame), CGRectGetMinY(searchBar.frame), targetWidth, targetHeight);
 	}
 
 	for (UIView *subview in searchBar.subviews) {
