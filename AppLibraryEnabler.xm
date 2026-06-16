@@ -40,6 +40,10 @@
 @end
 
 @interface SBHLibrarySearchController : UIViewController
+- (bool)isActive;
+- (bool)isSearchFieldEditing;
+- (void)setActive:(bool)active;
+- (void)setSearchFieldEditing:(bool)editing;
 @end
 
 @interface SBNestingViewController : UIViewController
@@ -114,6 +118,7 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
+static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
@@ -121,6 +126,7 @@ static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
+static BOOL ALELibrarySearchIsActive(void);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -216,6 +222,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		return;
 	}
 
+	ALELastLibrarySearchController = searchController;
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
 	if ([searchBar isKindOfClass:[UIView class]]) {
 		ALELastLibrarySearchBar = searchBar;
@@ -237,6 +244,23 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 
 	ALEApplyLibrarySearchBarLayout(searchBar);
+}
+
+static BOOL ALELibrarySearchIsActive(void) {
+	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
+	if (![searchController isKindOfClass:[UIViewController class]]) {
+		return NO;
+	}
+
+	BOOL active = NO;
+	if ([searchController respondsToSelector:@selector(isActive)]) {
+		active = [searchController isActive];
+	}
+	if (!active && [searchController respondsToSelector:@selector(isSearchFieldEditing)]) {
+		active = [searchController isSearchFieldEditing];
+	}
+
+	return active;
 }
 
 static BOOL ALEHasLibraryRootGridWidth(void) {
@@ -429,6 +453,10 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	}
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
+	if (ALELibrarySearchIsActive()) {
+		CGFloat cancelReservedWidth = MAX((CGFloat)86.0, CGRectGetHeight(searchBar.bounds) * 2.4);
+		targetWidth -= cancelReservedWidth;
+	}
 	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
 	if (targetWidth <= 0 || targetHeight <= 0) {
 		return;
@@ -1043,6 +1071,14 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	);
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
+}
+- (void)setActive:(bool)active {
+	%orig;
+	ALELayoutLibrarySearchController(self);
+}
+- (void)setSearchFieldEditing:(bool)editing {
+	%orig;
+	ALELayoutLibrarySearchController(self);
 }
 %end
 
