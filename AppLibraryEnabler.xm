@@ -260,10 +260,6 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 		return 0;
 	}
 
-	if (targetWidth > referenceWidth + 1.0) {
-		return 0;
-	}
-
 	return targetWidth;
 }
 
