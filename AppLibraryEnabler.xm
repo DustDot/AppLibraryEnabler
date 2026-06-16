@@ -278,6 +278,9 @@ static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
 	}
 
 	CGFloat targetWidth = ALELastLibraryRootGridWidth;
+	if (ALELibrarySearchIsActive() && ALELibrarySearchActiveTargetWidth > targetWidth) {
+		targetWidth = MIN(referenceWidth, ALELibrarySearchActiveTargetWidth);
+	}
 	if (targetWidth <= 0) {
 		return 0;
 	}
@@ -296,8 +299,13 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 		return frame;
 	}
 
+	CGFloat baseWidth = ALELastLibraryRootGridWidth;
 	frame.size.width = targetWidth;
-	frame.origin.x = (referenceWidth - targetWidth) / 2.0;
+	if (ALELibrarySearchIsActive() && ALELibrarySearchActiveTargetWidth > baseWidth && baseWidth > 0) {
+		frame.origin.x = (referenceWidth - baseWidth) / 2.0;
+	} else {
+		frame.origin.x = (referenceWidth - targetWidth) / 2.0;
+	}
 	return frame;
 }
 
@@ -514,6 +522,11 @@ static void ALEUpdateLibrarySearchActiveTargetWidth(void) {
 	SBHSearchBar *searchBar = ALELastLibrarySearchBar;
 	if (![searchBar isKindOfClass:[UIView class]] || !ALELibrarySearchIsActive()) {
 		ALELibrarySearchActiveTargetWidth = 0;
+		return;
+	}
+
+	if (ALELibrarySearchActiveTargetWidth > 0) {
+		ALEApplyLibrarySearchBarLayout(searchBar);
 		return;
 	}
 
