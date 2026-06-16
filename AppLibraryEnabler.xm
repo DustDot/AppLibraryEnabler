@@ -497,6 +497,29 @@ static CGFloat ALELibrarySearchCancelButtonMinXInView(UIView *view, UIView *targ
 	return minX;
 }
 
+static CGFloat ALELibrarySearchTrailingButtonMinXInView(UIView *view, UIView *targetView, CGRect searchFrame) {
+	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView || view == targetView) {
+		return CGFLOAT_MAX;
+	}
+
+	CGFloat minX = CGFLOAT_MAX;
+	CGRect frame = [view convertRect:view.bounds toView:targetView.superview];
+	CGFloat width = CGRectGetWidth(frame);
+	CGFloat height = CGRectGetHeight(frame);
+	BOOL intersectsSearchRow = CGRectGetMaxY(frame) > CGRectGetMinY(searchFrame) && CGRectGetMinY(frame) < CGRectGetMaxY(searchFrame);
+	BOOL sitsAfterSearch = CGRectGetMinX(frame) > CGRectGetMinX(searchFrame) && CGRectGetMinX(frame) < CGRectGetMaxX(searchFrame) + 180.0;
+	BOOL looksButtonSized = width >= 24.0 && width <= 160.0 && height >= 16.0 && height <= CGRectGetHeight(searchFrame) * 1.8;
+	if (intersectsSearchRow && sitsAfterSearch && looksButtonSized) {
+		minX = MIN(minX, CGRectGetMinX(frame));
+	}
+
+	for (UIView *subview in view.subviews) {
+		minX = MIN(minX, ALELibrarySearchTrailingButtonMinXInView(subview, targetView, searchFrame));
+	}
+
+	return minX;
+}
+
 static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]]) {
 		return CGFLOAT_MAX;
@@ -507,7 +530,12 @@ static CGFloat ALELibrarySearchCancelButtonMinX(SBHSearchBar *searchBar) {
 		return CGFLOAT_MAX;
 	}
 
-	return ALELibrarySearchCancelButtonMinXInView(searchController.view, searchBar);
+	CGFloat minX = ALELibrarySearchCancelButtonMinXInView(searchController.view, searchBar);
+	if (minX != CGFLOAT_MAX) {
+		return minX;
+	}
+
+	return ALELibrarySearchTrailingButtonMinXInView(searchController.view, searchBar, searchBar.frame);
 }
 
 static void ALEUpdateLibrarySearchActiveTargetWidth(void) {
@@ -529,6 +557,9 @@ static void ALEScheduleLibrarySearchActiveTargetWidthUpdate(void) {
 		ALEUpdateLibrarySearchActiveTargetWidth();
 	});
 	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+		ALEUpdateLibrarySearchActiveTargetWidth();
+	});
+	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 		ALEUpdateLibrarySearchActiveTargetWidth();
 	});
 }
