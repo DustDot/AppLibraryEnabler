@@ -115,10 +115,15 @@ static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
+static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
+static CGFloat ALELibrarySearchBarAlphaBeforeFolder = 1.0;
+static BOOL ALELibrarySearchBarHiddenBeforeFolder = NO;
+static BOOL ALELibrarySearchBarStateCapturedForFolder = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
+static void ALESetLibrarySearchBarHiddenForPodFolder(BOOL hidden);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -235,6 +240,9 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	}
 
 	ALEApplyLibrarySearchBarLayout(searchBar);
+	if (ALELibraryPodFolderPresentedOrAnimating) {
+		ALESetLibrarySearchBarHiddenForPodFolder(YES);
+	}
 }
 
 static BOOL ALEHasLibraryRootGridWidth(void) {
@@ -339,6 +347,43 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	} @finally {
 		ALEApplyingLibrarySearchBarLayout = NO;
 	}
+}
+
+static void ALESetLibrarySearchBarHiddenForPodFolder(BOOL hidden) {
+	SBHSearchBar *searchBar = ALELastLibrarySearchBar;
+	if (![searchBar isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	if (hidden) {
+		if (!ALELibrarySearchBarStateCapturedForFolder) {
+			ALELibrarySearchBarAlphaBeforeFolder = searchBar.alpha;
+			ALELibrarySearchBarHiddenBeforeFolder = searchBar.hidden;
+			ALELibrarySearchBarStateCapturedForFolder = YES;
+		}
+		searchBar.hidden = YES;
+		searchBar.alpha = 0;
+		return;
+	}
+
+	if (!ALELibrarySearchBarStateCapturedForFolder) {
+		return;
+	}
+
+	searchBar.hidden = ALELibrarySearchBarHiddenBeforeFolder;
+	searchBar.alpha = ALELibrarySearchBarAlphaBeforeFolder;
+	ALELibrarySearchBarStateCapturedForFolder = NO;
+	ALEApplyLibrarySearchBarLayout(searchBar);
+}
+
+static void ALEBeginLibraryPodFolderPresentation(void) {
+	ALELibraryPodFolderPresentedOrAnimating = YES;
+	ALESetLibrarySearchBarHiddenForPodFolder(YES);
+}
+
+static void ALEEndLibraryPodFolderPresentation(void) {
+	ALELibraryPodFolderPresentedOrAnimating = NO;
+	ALESetLibrarySearchBarHiddenForPodFolder(NO);
 }
 
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL libraryRootLayout) {
@@ -932,11 +977,23 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibraryPodFolderController
+- (void)viewWillAppear:(bool)arg1 {
+	ALEBeginLibraryPodFolderPresentation();
+	%orig;
+}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
+}
+- (void)viewWillDisappear:(bool)arg1 {
+	ALEBeginLibraryPodFolderPresentation();
+	%orig;
+}
+- (void)viewDidDisappear:(bool)arg1 {
+	%orig;
+	ALEEndLibraryPodFolderPresentation();
 }
 %end
 
