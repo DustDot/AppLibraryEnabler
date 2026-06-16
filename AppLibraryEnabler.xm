@@ -476,7 +476,14 @@ static CGFloat ALELibrarySearchCancelButtonMinXInView(UIView *view, UIView *targ
 	}
 
 	CGFloat minX = CGFLOAT_MAX;
-	if (ALEViewLooksLikeCancelButton(view)) {
+	if ([view isKindOfClass:[UIButton class]] && ALEStringLooksLikeCancel([(UIButton *)view titleForState:UIControlStateNormal])) {
+		UILabel *titleLabel = [(UIButton *)view titleLabel];
+		UIView *candidateView = [titleLabel isKindOfClass:[UIView class]] && !titleLabel.hidden && titleLabel.alpha > 0.01 ? titleLabel : view;
+		CGRect frame = [candidateView convertRect:candidateView.bounds toView:targetView];
+		if (CGRectGetWidth(frame) > 12.0 && CGRectGetHeight(frame) > 12.0) {
+			minX = MIN(minX, CGRectGetMinX(frame));
+		}
+	} else if (ALEViewLooksLikeCancelButton(view)) {
 		CGRect frame = [view convertRect:view.bounds toView:targetView];
 		if (CGRectGetWidth(frame) > 12.0 && CGRectGetHeight(frame) > 12.0) {
 			minX = MIN(minX, CGRectGetMinX(frame));
