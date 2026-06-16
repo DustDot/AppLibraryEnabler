@@ -121,8 +121,6 @@ static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
-static BOOL ALEViewContainsEditingTextField(UIView *view);
-static CGFloat ALEVisibleCancelButtonMinX(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -279,15 +277,6 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 
 	frame.size.width = targetWidth;
 	frame.origin.x = (referenceWidth - targetWidth) / 2.0;
-	if (ALEViewContainsEditingTextField(searchBar)) {
-		CGFloat maxX = ALEVisibleCancelButtonMinX(searchBar) - 16.0;
-		if (maxX <= frame.origin.x) {
-			maxX = referenceWidth - MAX((CGFloat)64.0, CGRectGetHeight(searchBar.bounds) * 2.0);
-		}
-		if (maxX > frame.origin.x) {
-			frame.size.width = maxX - frame.origin.x;
-		}
-	}
 	return frame;
 }
 
@@ -429,52 +418,6 @@ static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetVie
 	return hasBounds;
 }
 
-static BOOL ALEViewContainsEditingTextField(UIView *view) {
-	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
-		return NO;
-	}
-
-	if ([view isKindOfClass:[UITextField class]] && [(UITextField *)view isEditing]) {
-		return YES;
-	}
-
-	for (UIView *subview in view.subviews) {
-		if (ALEViewContainsEditingTextField(subview)) {
-			return YES;
-		}
-	}
-
-	return NO;
-}
-
-static CGFloat ALEVisibleCancelButtonMinXInView(UIView *view, UIView *targetView) {
-	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView) {
-		return CGFLOAT_MAX;
-	}
-
-	CGFloat minX = CGFLOAT_MAX;
-	if ([view isKindOfClass:[UIButton class]]) {
-		CGRect frame = [view convertRect:view.bounds toView:targetView];
-		if (CGRectGetWidth(frame) > 12.0 && CGRectGetHeight(frame) > 12.0) {
-			minX = MIN(minX, CGRectGetMinX(frame));
-		}
-	}
-
-	for (UIView *subview in view.subviews) {
-		minX = MIN(minX, ALEVisibleCancelButtonMinXInView(subview, targetView));
-	}
-
-	return minX;
-}
-
-static CGFloat ALEVisibleCancelButtonMinX(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]] || !searchBar.superview) {
-		return CGFLOAT_MAX;
-	}
-
-	return ALEVisibleCancelButtonMinXInView(searchBar.superview, searchBar.superview);
-}
-
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
 		return;
@@ -485,10 +428,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	CGFloat targetWidth = ALEViewContainsEditingTextField(searchBar) ? CGRectGetWidth(searchBar.frame) : ALELastLibraryRootGridWidth;
-	if (targetWidth <= 0) {
-		targetWidth = CGRectGetWidth(searchBar.bounds);
-	}
+	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
 	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
 	if (targetWidth <= 0 || targetHeight <= 0) {
 		return;
