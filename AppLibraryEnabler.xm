@@ -127,8 +127,10 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
 static BOOL ALELibrarySearchResultsAreVisible(void);
+static BOOL ALELibraryRootIsPulledForSearch(void);
 static BOOL ALEViewContainsActiveTextField(UIView *view);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
+static UIScrollView *ALEEnclosingScrollView(UIView *view);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -275,6 +277,15 @@ static BOOL ALELibrarySearchResultsAreVisible(void) {
 
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
 	return [searchResultsContainerView isKindOfClass:[UIView class]] && !searchResultsContainerView.hidden && searchResultsContainerView.alpha > 0.01;
+}
+
+static BOOL ALELibraryRootIsPulledForSearch(void) {
+	UIScrollView *scrollView = ALEEnclosingScrollView(ALELastLibraryRootVisibleListView);
+	if (![scrollView isKindOfClass:[UIScrollView class]]) {
+		return NO;
+	}
+
+	return scrollView.contentOffset.y < -8.0;
 }
 
 static BOOL ALEViewContainsActiveTextField(UIView *view) {
@@ -503,7 +514,7 @@ static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALELibrarySearchIsActive() || ALELibrarySearchResultsAreVisible() || ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibrarySearchIsActive() || (ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch()) || ALEViewContainsActiveTextField(searchBar)) {
 		return;
 	}
 
