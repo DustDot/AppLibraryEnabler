@@ -114,12 +114,17 @@ static CGFloat ALELastLibraryRootListWidth = 0;
 static NSUInteger ALELastLibraryRootColumnCount = 0;
 static BOOL ALELastLibraryRootLandscape = NO;
 static SBHSearchBar *ALELastLibrarySearchBar = nil;
+static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
+static BOOL ALEHasLibraryRootGridWidth(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
+static CGRect ALELibrarySearchContentFrame(CGRect fullFrame);
+static void ALESetLibrarySearchSubviewFrame(UIView *view, UIView *rootView, CGRect contentFrame);
+static BOOL ALESearchBarIsInsideLibrarySearchController(SBHSearchBar *searchBar);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -211,11 +216,66 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	}
 }
 
+static CGRect ALELibrarySearchContentFrame(CGRect fullFrame) {
+	if (!ALEHasLibraryRootGridWidth() || ALELastLibraryRootGridWidth <= 0) {
+		return fullFrame;
+	}
+
+	CGRect frame = fullFrame;
+	frame.size.width = MIN(CGRectGetWidth(fullFrame), ALELastLibraryRootGridWidth);
+	frame.origin.x = (CGRectGetWidth(fullFrame) - CGRectGetWidth(frame)) / 2.0;
+	return frame;
+}
+
+static void ALESetLibrarySearchSubviewFrame(UIView *view, UIView *rootView, CGRect contentFrame) {
+	if (![view isKindOfClass:[UIView class]] || ![rootView isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	UIView *superview = view.superview;
+	if (![superview isKindOfClass:[UIView class]]) {
+		view.frame = contentFrame;
+		return;
+	}
+
+	view.frame = [rootView convertRect:contentFrame toView:superview];
+}
+
+static BOOL ALESearchBarIsInsideLibrarySearchController(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]]) {
+		return NO;
+	}
+
+	UIView *searchControllerView = nil;
+	if (searchBar == ALELastLibrarySearchBar && [ALELastLibrarySearchController isKindOfClass:[UIViewController class]]) {
+		searchControllerView = ALELastLibrarySearchController.view;
+	}
+	id controller = [searchBar _viewControllerForAncestor];
+	if ([controller isKindOfClass:[SBHLibrarySearchController class]]) {
+		searchControllerView = ((UIViewController *)controller).view;
+	}
+
+	if (!searchControllerView) {
+		return NO;
+	}
+
+	UIView *view = searchBar;
+	while ([view isKindOfClass:[UIView class]]) {
+		if (view == searchControllerView) {
+			return YES;
+		}
+		view = view.superview;
+	}
+
+	return NO;
+}
+
 static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
 	if (!searchController.view) {
 		return;
 	}
 
+	ALELastLibrarySearchController = searchController;
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
 	if ([searchBar isKindOfClass:[UIView class]]) {
 		ALELastLibrarySearchBar = searchBar;
@@ -225,9 +285,10 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
 
 	CGRect fullFrame = searchController.view.bounds;
-	[containerView setFrame:fullFrame];
-	[contentContainerView setFrame:fullFrame];
-	[searchResultsContainerView setFrame:fullFrame];
+	CGRect contentFrame = ALELibrarySearchContentFrame(fullFrame);
+	ALESetLibrarySearchSubviewFrame(containerView, searchController.view, contentFrame);
+	ALESetLibrarySearchSubviewFrame(contentContainerView, searchController.view, contentFrame);
+	ALESetLibrarySearchSubviewFrame(searchResultsContainerView, searchController.view, contentFrame);
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
@@ -236,7 +297,6 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
 	}
 
-	ALEApplyLibrarySearchBarLayout(searchBar);
 }
 
 static BOOL ALEHasLibraryRootGridWidth(void) {
@@ -269,6 +329,10 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 		return frame;
 	}
 
+	if (ALESearchBarIsInsideLibrarySearchController(searchBar)) {
+		return frame;
+	}
+
 	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
 	if (targetWidth <= 0) {
@@ -285,6 +349,10 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 		return center;
 	}
 
+	if (ALESearchBarIsInsideLibrarySearchController(searchBar)) {
+		return center;
+	}
+
 	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
 	if (ALELibrarySearchTargetWidth(referenceWidth) <= 0) {
@@ -297,6 +365,10 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 
 static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return bounds;
+	}
+
+	if (ALESearchBarIsInsideLibrarySearchController(searchBar)) {
 		return bounds;
 	}
 
@@ -324,6 +396,10 @@ static CGAffineTransform ALELibrarySearchTargetTransform(SBHSearchBar *searchBar
 
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return;
+	}
+
+	if (ALESearchBarIsInsideLibrarySearchController(searchBar)) {
 		return;
 	}
 
@@ -420,6 +496,10 @@ static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetVie
 
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
 	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
+		return;
+	}
+
+	if (ALESearchBarIsInsideLibrarySearchController(searchBar)) {
 		return;
 	}
 
