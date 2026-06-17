@@ -120,6 +120,7 @@ static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibrarySearchActivating = NO;
 static BOOL ALELibrarySearchEditingActive = NO;
+static CGRect ALELastLibrarySearchGridFrame = CGRectZero;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
@@ -247,13 +248,10 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 	if (constrainSearchResults && ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
-		if ([searchBar isKindOfClass:[UIView class]] && searchBar.superview) {
-			CGRect searchBarFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
-			if (CGRectGetWidth(searchBarFrame) > 0) {
-				gridFrame = [searchBar.superview convertRect:searchBarFrame toView:searchController.view];
-				gridFrame.origin.y = CGRectGetMinY(fullFrame);
-				gridFrame.size.height = CGRectGetHeight(fullFrame);
-			}
+		if (!CGRectIsEmpty(ALELastLibrarySearchGridFrame) && CGRectGetWidth(ALELastLibrarySearchGridFrame) > 0) {
+			gridFrame = ALELastLibrarySearchGridFrame;
+			gridFrame.origin.y = CGRectGetMinY(fullFrame);
+			gridFrame.size.height = CGRectGetHeight(fullFrame);
 		}
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
@@ -478,6 +476,13 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	}
 
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
+	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
+	if ([searchController isKindOfClass:[UIViewController class]] && searchController.view) {
+		ALELastLibrarySearchGridFrame = [searchBar.superview convertRect:targetFrame toView:searchController.view];
+	} else {
+		ALELastLibrarySearchGridFrame = targetFrame;
+	}
+
 	BOOL frameNeedsUpdate = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(targetFrame)) > 0.5;
 	frameNeedsUpdate = frameNeedsUpdate || fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(targetFrame)) > 0.5;
 
