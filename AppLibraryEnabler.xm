@@ -352,10 +352,8 @@ static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame,
 
 	for (UIView *subview in view.subviews) {
 		CGRect frame = subview.frame;
-		CGFloat width = CGRectGetWidth(frame);
-		BOOL spansFullWidth = width > CGRectGetWidth(gridFrame) + 20.0 && width <= CGRectGetWidth(fullFrame) + 20.0;
 		BOOL isResultContent = CGRectGetHeight(frame) > 80.0 && CGRectGetMaxY(frame) > 120.0;
-		if (spansFullWidth && isResultContent) {
+		if (isResultContent) {
 			frame.origin.x = CGRectGetMinX(gridFrame);
 			frame.size.width = CGRectGetWidth(gridFrame);
 			[subview setFrame:frame];
