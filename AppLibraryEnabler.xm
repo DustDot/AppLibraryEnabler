@@ -287,7 +287,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 
 	CGRect fullFrame = searchController.view.bounds;
 	CGRect contentFrame = ALELibrarySearchContentFrame(fullFrame);
-	ALESetLibrarySearchSubviewFrame(containerView, searchController.view, contentFrame);
+	[containerView setFrame:fullFrame];
 	ALESetLibrarySearchSubviewFrame(contentContainerView, searchController.view, contentFrame);
 	ALESetLibrarySearchSubviewFrame(searchResultsContainerView, searchController.view, contentFrame);
 
