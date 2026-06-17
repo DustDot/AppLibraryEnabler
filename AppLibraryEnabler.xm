@@ -226,7 +226,7 @@ static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayCon
 	}
 }
 
-static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
+static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController, BOOL constrainSearchResults) {
 	if (!searchController.view) {
 		return;
 	}
@@ -244,7 +244,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[containerView setFrame:fullFrame];
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
-	if (ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
+	if (constrainSearchResults && ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
@@ -1160,23 +1160,23 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %hook SBHLibrarySearchController
 - (void)viewDidLoad {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewWillLayoutSubviews {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)_layoutSearchViews {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, YES);
 	MTMaterialView *searchBackdropView = ALEValueForKey(self, @"_searchBackdropView");
 
 	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
@@ -1196,7 +1196,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	ALELibrarySearchActivating = active && pulledForSearch;
 	%orig;
 	ALELibrarySearchEditingActive = active && !pulledForSearch && ALEViewContainsActiveTextField(ALELastLibrarySearchBar);
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 	ALELibrarySearchActivating = NO;
 	if (!active) {
 		ALELibrarySearchEditingActive = NO;
