@@ -290,7 +290,8 @@ static BOOL ALELibraryRootIsPulledForSearch(void) {
 		return NO;
 	}
 
-	return scrollView.contentOffset.y < -8.0;
+	BOOL activelyScrolling = scrollView.tracking || scrollView.dragging || scrollView.decelerating;
+	return activelyScrolling && scrollView.contentOffset.y < -8.0;
 }
 
 static BOOL ALEViewContainsActiveTextField(UIView *view) {
