@@ -138,7 +138,6 @@ static BOOL ALEViewContainsActiveTextField(UIView *view);
 static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchShouldUseNativeSearchBarFrame(SBHSearchBar *searchBar);
 static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame);
-static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
 static UIScrollView *ALEEnclosingScrollView(UIView *view);
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -234,6 +233,7 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	if (!searchController.view) {
 		return;
 	}
+	(void)constrainSearchResults;
 
 	ALELastLibrarySearchController = searchController;
 	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
@@ -248,17 +248,6 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[containerView setFrame:fullFrame];
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
-	if (constrainSearchResults && ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
-		CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
-		CGRect rootGridFrame = CGRectZero;
-		if (ALELibraryRootGridFrameInView(searchController.view, &rootGridFrame)) {
-			CGFloat gridMinX = MIN(MAX((CGFloat)0, CGRectGetMinX(rootGridFrame)), CGRectGetWidth(fullFrame));
-			CGFloat gridWidth = MIN(CGRectGetWidth(fullFrame) - gridMinX, CGRectGetWidth(rootGridFrame));
-			gridFrame.origin.x = gridMinX;
-			gridFrame.size.width = MAX((CGFloat)0, gridWidth);
-		}
-		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
-	}
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
@@ -356,25 +345,6 @@ static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame) {
 	return gridFrame;
 }
 
-static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame) {
-	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
-		return;
-	}
-
-	for (UIView *subview in view.subviews) {
-		CGRect frame = subview.frame;
-		BOOL isResultContent = CGRectGetHeight(frame) > 80.0 && CGRectGetMaxY(frame) > 120.0;
-		if (isResultContent) {
-			frame.origin.x = CGRectGetMinX(gridFrame);
-			frame.size.width = CGRectGetWidth(gridFrame);
-			[subview setFrame:frame];
-			continue;
-		}
-
-		ALEConstrainLibrarySearchResultsView(subview, gridFrame, fullFrame);
-	}
-}
-
 static BOOL ALELibraryRootGridFrameInView(UIView *view, CGRect *frame) {
 	if (![view isKindOfClass:[UIView class]] || !view.window || !frame || CGRectIsEmpty(ALELastLibraryRootGridFrameInWindow)) {
 		return NO;
@@ -386,6 +356,33 @@ static BOOL ALELibraryRootGridFrameInView(UIView *view, CGRect *frame) {
 	}
 
 	*frame = convertedFrame;
+	return YES;
+}
+
+static BOOL ALELibrarySearchResultsEdgeInsets(SBHLibrarySearchController *searchController, id childViewController, UIEdgeInsets *edgeInsets) {
+	if (![searchController isKindOfClass:[UIViewController class]] || !searchController.view || !edgeInsets) {
+		return NO;
+	}
+
+	id searchResultsController = ALEValueForKey(searchController, @"_searchResultsController");
+	if (!searchResultsController || childViewController != searchResultsController) {
+		return NO;
+	}
+
+	CGRect gridFrame = CGRectZero;
+	if (!ALELibraryRootGridFrameInView(searchController.view, &gridFrame)) {
+		gridFrame = ALELibraryRootGridFrameForBounds(searchController.view.bounds);
+	}
+
+	CGFloat viewWidth = CGRectGetWidth(searchController.view.bounds);
+	CGFloat gridMinX = CGRectGetMinX(gridFrame);
+	CGFloat gridMaxX = CGRectGetMaxX(gridFrame);
+	if (viewWidth <= 0 || CGRectGetWidth(gridFrame) <= 0 || gridMinX < 0 || gridMaxX > viewWidth) {
+		return NO;
+	}
+
+	edgeInsets->left = gridMinX;
+	edgeInsets->right = viewWidth - gridMaxX;
 	return YES;
 }
 
@@ -1189,6 +1186,11 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %end
 
 %hook SBHLibrarySearchController
+- (UIEdgeInsets)_edgeInsetsForChildViewController:(id)childViewController insetsAreAbsolute:(BOOL *)insetsAreAbsolute {
+	UIEdgeInsets edgeInsets = %orig;
+	ALELibrarySearchResultsEdgeInsets(self, childViewController, &edgeInsets);
+	return edgeInsets;
+}
 - (void)viewDidLoad {
 	%orig;
 	ALELayoutLibrarySearchController(self, NO);
