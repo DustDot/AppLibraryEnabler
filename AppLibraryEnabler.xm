@@ -251,7 +251,8 @@ static BOOL ALESearchBarIsInsideLibrarySearchController(SBHSearchBar *searchBar)
 		searchControllerView = ALELastLibrarySearchController.view;
 	}
 	id controller = [searchBar _viewControllerForAncestor];
-	if ([controller isKindOfClass:[SBHLibrarySearchController class]]) {
+	Class searchControllerClass = NSClassFromString(@"SBHLibrarySearchController");
+	if (searchControllerClass && [controller isKindOfClass:searchControllerClass]) {
 		searchControllerView = ((UIViewController *)controller).view;
 	}
 
