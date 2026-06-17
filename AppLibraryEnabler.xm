@@ -316,7 +316,7 @@ static BOOL ALEViewContainsActiveTextField(UIView *view) {
 
 static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar) {
 	BOOL pulledSearchVisible = ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch();
-	return ALELibrarySearchIsActive() || pulledSearchVisible || ALEViewContainsActiveTextField(searchBar);
+	return ALELibrarySearchActivating || pulledSearchVisible || ALEViewContainsActiveTextField(searchBar);
 }
 
 static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame) {
