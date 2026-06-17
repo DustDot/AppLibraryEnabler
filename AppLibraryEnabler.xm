@@ -44,6 +44,9 @@
 - (void)setActive:(bool)active animated:(bool)animated;
 @end
 
+@interface SBHIconLibraryTableViewController : UITableViewController
+@end
+
 @interface SBNestingViewController : UIViewController
 @end
 @interface SBFolderController : SBNestingViewController
@@ -122,6 +125,7 @@ static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibrarySearchActivating = NO;
 static BOOL ALELibrarySearchEditingActive = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
+static BOOL ALEApplyingLibrarySearchResultsLayout = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
@@ -138,7 +142,8 @@ static BOOL ALEViewContainsActiveTextField(UIView *view);
 static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchShouldUseNativeSearchBarFrame(SBHSearchBar *searchBar);
 static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame);
-static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
+static void ALELayoutLibrarySearchResultsController(SBHLibrarySearchController *searchController, CGRect gridFrame);
+static void ALELayoutLibrarySearchResultsControllerIfNeeded(SBHLibrarySearchController *searchController);
 static UIScrollView *ALEEnclosingScrollView(UIView *view);
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -248,16 +253,8 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[containerView setFrame:fullFrame];
 	[contentContainerView setFrame:fullFrame];
 	[searchResultsContainerView setFrame:fullFrame];
-	if (constrainSearchResults && ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
-		CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
-		CGRect rootGridFrame = CGRectZero;
-		if (ALELibraryRootGridFrameInView(searchController.view, &rootGridFrame)) {
-			CGFloat gridMinX = MIN(MAX((CGFloat)0, CGRectGetMinX(rootGridFrame)), CGRectGetWidth(fullFrame));
-			CGFloat gridWidth = MIN(CGRectGetWidth(fullFrame) - gridMinX, CGRectGetWidth(rootGridFrame));
-			gridFrame.origin.x = gridMinX;
-			gridFrame.size.width = MAX((CGFloat)0, gridWidth);
-		}
-		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
+	if (constrainSearchResults) {
+		ALELayoutLibrarySearchResultsControllerIfNeeded(searchController);
 	}
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
@@ -356,22 +353,70 @@ static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame) {
 	return gridFrame;
 }
 
-static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame) {
-	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
+static void ALELayoutLibrarySearchResultsControllerIfNeeded(SBHLibrarySearchController *searchController) {
+	if (![searchController isKindOfClass:[UIViewController class]] || !searchController.view || !ALELibrarySearchIsActive() || !ALEHasLibraryRootGridWidth() || ALELastLibraryRootGridWidth <= 0) {
 		return;
 	}
 
-	for (UIView *subview in view.subviews) {
-		CGRect frame = subview.frame;
-		BOOL isResultContent = CGRectGetHeight(frame) > 80.0 && CGRectGetMaxY(frame) > 120.0;
-		if (isResultContent) {
-			frame.origin.x = CGRectGetMinX(gridFrame);
-			frame.size.width = CGRectGetWidth(gridFrame);
-			[subview setFrame:frame];
-			continue;
-		}
+	CGRect fullFrame = searchController.view.bounds;
+	CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
+	CGRect rootGridFrame = CGRectZero;
+	if (ALELibraryRootGridFrameInView(searchController.view, &rootGridFrame)) {
+		CGFloat gridMinX = MIN(MAX((CGFloat)0, CGRectGetMinX(rootGridFrame)), CGRectGetWidth(fullFrame));
+		CGFloat gridWidth = MIN(CGRectGetWidth(fullFrame) - gridMinX, CGRectGetWidth(rootGridFrame));
+		gridFrame.origin.x = gridMinX;
+		gridFrame.size.width = MAX((CGFloat)0, gridWidth);
+	}
 
-		ALEConstrainLibrarySearchResultsView(subview, gridFrame, fullFrame);
+	ALELayoutLibrarySearchResultsController(searchController, gridFrame);
+}
+
+static void ALELayoutLibrarySearchResultsController(SBHLibrarySearchController *searchController, CGRect gridFrame) {
+	if (ALEApplyingLibrarySearchResultsLayout || ![searchController isKindOfClass:[UIViewController class]] || !searchController.view || CGRectGetWidth(gridFrame) <= 0) {
+		return;
+	}
+
+	id searchResultsController = ALEValueForKey(searchController, @"_searchResultsController");
+	if (![searchResultsController isKindOfClass:NSClassFromString(@"SBHIconLibraryTableViewController")]) {
+		return;
+	}
+
+	UIViewController *resultsController = (UIViewController *)searchResultsController;
+	UIView *resultsView = resultsController.view;
+	if (![resultsView isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	UIView *superview = resultsView.superview;
+	if (![superview isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	CGRect targetFrame = [searchController.view convertRect:gridFrame toView:superview];
+	targetFrame.origin.y = CGRectGetMinY(resultsView.frame);
+	targetFrame.size.height = CGRectGetHeight(resultsView.frame);
+	if (CGRectGetHeight(targetFrame) <= 0) {
+		targetFrame.size.height = CGRectGetHeight(superview.bounds) - CGRectGetMinY(targetFrame);
+	}
+	BOOL needsFrameUpdate = fabs(CGRectGetMinX(resultsView.frame) - CGRectGetMinX(targetFrame)) > 0.5;
+	needsFrameUpdate = needsFrameUpdate || fabs(CGRectGetWidth(resultsView.frame) - CGRectGetWidth(targetFrame)) > 0.5;
+	if (!needsFrameUpdate) {
+		return;
+	}
+
+	ALEApplyingLibrarySearchResultsLayout = YES;
+	@try {
+		resultsView.frame = targetFrame;
+
+		UITableView *tableView = nil;
+		if ([resultsController respondsToSelector:@selector(tableView)]) {
+			tableView = [(UITableViewController *)resultsController tableView];
+		}
+		if ([tableView isKindOfClass:[UITableView class]] && tableView != resultsView) {
+			tableView.frame = resultsView.bounds;
+		}
+	} @finally {
+		ALEApplyingLibrarySearchResultsLayout = NO;
 	}
 }
 
@@ -1231,6 +1276,17 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	ALELibrarySearchActivating = NO;
 	if (!active) {
 		ALELibrarySearchEditingActive = NO;
+	}
+}
+%end
+
+%hook SBHIconLibraryTableViewController
+- (void)viewDidLayoutSubviews {
+	%orig;
+	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
+	id searchResultsController = ALEValueForKey(searchController, @"_searchResultsController");
+	if (searchResultsController == self) {
+		ALELayoutLibrarySearchResultsControllerIfNeeded(searchController);
 	}
 }
 %end
