@@ -390,6 +390,10 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 		return frame;
 	}
 
+	if (ALEViewContainsActiveTextField(searchBar)) {
+		return frame;
+	}
+
 	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
 	if (targetWidth <= 0) {
@@ -406,6 +410,10 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 		return center;
 	}
 
+	if (ALEViewContainsActiveTextField(searchBar)) {
+		return center;
+	}
+
 	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
 	if (ALELibrarySearchTargetWidth(referenceWidth) <= 0) {
@@ -418,6 +426,10 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 
 static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return bounds;
+	}
+
+	if (ALEViewContainsActiveTextField(searchBar)) {
 		return bounds;
 	}
 
@@ -445,6 +457,10 @@ static CGAffineTransform ALELibrarySearchTargetTransform(SBHSearchBar *searchBar
 
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
+		return;
+	}
+
+	if (ALEViewContainsActiveTextField(searchBar)) {
 		return;
 	}
 
