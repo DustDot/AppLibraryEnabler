@@ -126,6 +126,7 @@ static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static BOOL ALEHasLibraryRootGridWidth(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
+static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
 static BOOL ALELibrarySearchResultsAreVisible(void);
@@ -246,6 +247,14 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 	if (constrainSearchResults && ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
+		if ([searchBar isKindOfClass:[UIView class]] && searchBar.superview) {
+			CGRect searchBarFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
+			if (CGRectGetWidth(searchBarFrame) > 0) {
+				gridFrame = [searchBar.superview convertRect:searchBarFrame toView:searchController.view];
+				gridFrame.origin.y = CGRectGetMinY(fullFrame);
+				gridFrame.size.height = CGRectGetHeight(fullFrame);
+			}
+		}
 		ALEConstrainLibrarySearchResultsView(searchResultsContainerView, gridFrame, fullFrame);
 	}
 
