@@ -1185,7 +1185,7 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	[searchBackdropView setFrame:fullScreenFrame];
 }
 - (void)setActive:(bool)active animated:(bool)animated {
-	ALELibrarySearchActivating = active;
+	ALELibrarySearchActivating = active && ALELibraryRootIsPulledForSearch();
 	%orig;
 	ALELayoutLibrarySearchController(self);
 	ALELibrarySearchActivating = NO;
