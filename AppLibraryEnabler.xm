@@ -17,6 +17,7 @@
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <string.h>
 
 @interface UIView (AppLibraryEnabler)
 - (id)_viewControllerForAncestor;
@@ -34,17 +35,13 @@
 
 @interface SBHomeScreenOverlayViewController : UIViewController
 @property (nonatomic, retain) UIViewController<SBHOccludable> *rightSidebarViewController;
+@property (nonatomic, retain) NSLayoutConstraint *contentWidthConstraint;
 @end
 
 @interface MTMaterialView : UIView
 @end
 
 @interface SBHLibrarySearchController : UIViewController
-- (bool)isActive;
-- (void)setActive:(bool)active animated:(bool)animated;
-@end
-
-@interface SBHIconLibraryTableViewController : UITableViewController
 @end
 
 @interface SBNestingViewController : UIViewController
@@ -61,7 +58,9 @@
 
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
+@property (nonatomic) unsigned long long numberOfLandscapeRows;
 @property (nonatomic) unsigned long long numberOfPortraitColumns;
+@property (nonatomic) unsigned long long numberOfPortraitRows;
 @property (nonatomic) CGSize listSizeForIconSpacingCalculation;
 @property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
@@ -76,26 +75,11 @@ struct SBHIconGridSize {
 - (struct SBHIconGridSize)listGridSize;
 @end
 
-@interface SBHLibraryCategoryFolder : SBFolder
-- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
-@end
-
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) SBFolder *folder;
 @property (nonatomic, readonly) unsigned long long numberOfIcons;
 - (struct SBHIconGridSize)gridSize;
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
-@end
-
-@interface SBIconListView : UIView
-@property (nonatomic, readonly) SBIconListModel *model;
-@property (nonatomic, readonly, copy) NSArray *icons;
-@property (nonatomic) NSRange visibleColumnRange;
-@property (nonatomic) NSRange visibleRowRange;
-- (id)iconViewForIcon:(id)icon;
-- (void)setFrame:(CGRect)frame;
-- (void)setBounds:(CGRect)bounds;
-- (void)showAllIcons;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -108,43 +92,6 @@ struct SBHIconGridSize {
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
-static BOOL ALEUpdatingLibraryRootScrollRange = NO;
-static BOOL ALEUpdatingLibraryRootVisibility = NO;
-static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
-static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
-static SBIconListView *ALELastLibraryRootVisibleListView = nil;
-static CGFloat ALELastLibraryRootGridMinX = 0;
-static CGFloat ALELastLibraryRootGridWidth = 0;
-static CGFloat ALELastLibraryRootListWidth = 0;
-static CGRect ALELastLibraryRootGridFrameInWindow = CGRectZero;
-static NSUInteger ALELastLibraryRootColumnCount = 0;
-static BOOL ALELastLibraryRootLandscape = NO;
-static SBHSearchBar *ALELastLibrarySearchBar = nil;
-static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
-static BOOL ALEApplyingLibrarySearchBarLayout = NO;
-static BOOL ALELibrarySearchActivating = NO;
-static BOOL ALELibrarySearchEditingActive = NO;
-static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
-static BOOL ALEApplyingLibrarySearchResultsLayout = NO;
-
-static BOOL ALEIsLandscapeScreen(void);
-static NSUInteger ALELibraryCategoriesRootColumnCount(void);
-static BOOL ALEHasLibraryRootGridWidth(void);
-static BOOL ALELibraryRootGridFrameInView(UIView *view, CGRect *frame);
-static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
-static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth);
-static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame);
-static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
-static BOOL ALELibrarySearchIsActive(void);
-static BOOL ALELibrarySearchResultsAreVisible(void);
-static BOOL ALELibraryRootIsPulledForSearch(void);
-static BOOL ALEViewContainsActiveTextField(UIView *view);
-static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar);
-static BOOL ALELibrarySearchShouldUseNativeSearchBarFrame(SBHSearchBar *searchBar);
-static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame);
-static void ALELayoutLibrarySearchResultsController(SBHLibrarySearchController *searchController, CGRect gridFrame);
-static void ALELayoutLibrarySearchResultsControllerIfNeeded(SBHLibrarySearchController *searchController);
-static UIScrollView *ALEEnclosingScrollView(UIView *view);
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -184,23 +131,21 @@ static BOOL ALEIsLibraryController(id controller) {
 	return NO;
 }
 
-static CGFloat ALEFullWidthForView(UIView *view) {
-	CGFloat width = 0;
-	width = MAX(width, CGRectGetWidth(view.bounds));
-	width = MAX(width, CGRectGetWidth(view.superview.bounds));
-	width = MAX(width, CGRectGetWidth(view.window.bounds));
-
-	CGSize screenSize = [UIScreen mainScreen].bounds.size;
-	width = MAX(width, screenSize.width);
-
-	return width;
-}
-
 static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
 	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
 	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
 
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
+}
+
+static CGFloat ALEFullWidthForView(UIView *view) {
+	CGFloat width = 0;
+	width = MAX(width, CGRectGetWidth(view.bounds));
+	width = MAX(width, CGRectGetWidth(view.superview.bounds));
+	width = MAX(width, CGRectGetWidth(view.window.bounds));
+	width = MAX(width, [UIScreen mainScreen].bounds.size.width);
+	width = MAX(width, [UIScreen mainScreen].bounds.size.height);
+	return width;
 }
 
 static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
@@ -223,488 +168,8 @@ static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
 	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
 }
 
-static void ALEUpdateOverlayLayout(SBHomeScreenOverlayViewController *overlayController) {
-	if (!overlayController || !ALEOverlayShowsAppLibrary(overlayController)) {
-		return;
-	}
-
-	CGFloat fullWidth = ALEFullWidthForView(overlayController.view);
-	NSLayoutConstraint *contentWidthConstraint = ALEValueForKey(overlayController, @"contentWidthConstraint");
-	if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
-		contentWidthConstraint.constant = fullWidth;
-	}
-}
-
-static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController, BOOL constrainSearchResults) {
-	if (!searchController.view) {
-		return;
-	}
-
-	ALELastLibrarySearchController = searchController;
-	SBHSearchBar *searchBar = ALEValueForKey(searchController, @"_searchBar");
-	if ([searchBar isKindOfClass:[UIView class]]) {
-		ALELastLibrarySearchBar = searchBar;
-	}
-	UIView *containerView = ALEValueForKey(searchController, @"_containerView");
-	UIView *contentContainerView = ALEValueForKey(searchController, @"_contentContainerView");
-	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
-
-	CGRect fullFrame = searchController.view.bounds;
-	[containerView setFrame:fullFrame];
-	[contentContainerView setFrame:fullFrame];
-	[searchResultsContainerView setFrame:fullFrame];
-	if (constrainSearchResults) {
-		ALELayoutLibrarySearchResultsControllerIfNeeded(searchController);
-	}
-
-	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
-		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
-		searchTextFieldHorizontalEdgeInsets.left = 23;
-		searchTextFieldHorizontalEdgeInsets.right = 23;
-		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
-	}
-
-	ALEApplyLibrarySearchBarLayout(searchBar);
-}
-
-static BOOL ALELibrarySearchIsActive(void) {
-	if (ALELibrarySearchActivating) {
-		return YES;
-	}
-
-	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
-	if (![searchController isKindOfClass:[UIViewController class]]) {
-		return NO;
-	}
-
-	if (![searchController respondsToSelector:@selector(isActive)]) {
-		return NO;
-	}
-
-	return [searchController isActive];
-}
-
-static BOOL ALELibrarySearchResultsAreVisible(void) {
-	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
-	if (![searchController isKindOfClass:[UIViewController class]] || !searchController.view || searchController.view.hidden || searchController.view.alpha <= 0.01) {
-		return NO;
-	}
-
-	UIView *searchResultsContainerView = ALEValueForKey(searchController, @"_searchResultsContainerView");
-	return [searchResultsContainerView isKindOfClass:[UIView class]] && !searchResultsContainerView.hidden && searchResultsContainerView.alpha > 0.01;
-}
-
-static BOOL ALELibraryRootIsPulledForSearch(void) {
-	UIScrollView *scrollView = ALEEnclosingScrollView(ALELastLibraryRootVisibleListView);
-	if (![scrollView isKindOfClass:[UIScrollView class]]) {
-		return NO;
-	}
-
-	BOOL activelyScrolling = scrollView.tracking || scrollView.dragging || scrollView.decelerating;
-	return activelyScrolling && scrollView.contentOffset.y < -8.0;
-}
-
-static BOOL ALEViewContainsActiveTextField(UIView *view) {
-	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01) {
-		return NO;
-	}
-
-	if ([view isKindOfClass:[UITextField class]]) {
-		UITextField *textField = (UITextField *)view;
-		if (textField.isEditing || textField.isFirstResponder) {
-			return YES;
-		}
-	}
-
-	for (UIView *subview in view.subviews) {
-		if (ALEViewContainsActiveTextField(subview)) {
-			return YES;
-		}
-	}
-
-	return NO;
-}
-
-static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar) {
-	BOOL pulledSearchVisible = ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch();
-	return ALELibrarySearchIsActive() || ALELibrarySearchActivating || pulledSearchVisible || ALEViewContainsActiveTextField(searchBar);
-}
-
-static BOOL ALELibrarySearchShouldUseNativeSearchBarFrame(SBHSearchBar *searchBar) {
-	return ALELibrarySearchEditingActive && ALEViewContainsActiveTextField(searchBar);
-}
-
-static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame) {
-	CGRect gridFrame = fullFrame;
-	CGFloat gridMinX = ALELastLibraryRootGridMinX;
-	CGFloat gridWidth = ALELastLibraryRootGridWidth;
-	if (gridWidth <= 0) {
-		return gridFrame;
-	}
-
-	gridMinX = MAX((CGFloat)0.0, MIN(gridMinX, CGRectGetWidth(fullFrame)));
-	gridWidth = MIN(gridWidth, CGRectGetWidth(fullFrame) - gridMinX);
-	if (gridWidth <= 0) {
-		return gridFrame;
-	}
-
-	gridFrame.origin.x = gridMinX;
-	gridFrame.size.width = gridWidth;
-	return gridFrame;
-}
-
-static void ALELayoutLibrarySearchResultsControllerIfNeeded(SBHLibrarySearchController *searchController) {
-	if (![searchController isKindOfClass:[UIViewController class]] || !searchController.view || !ALELibrarySearchIsActive() || !ALEHasLibraryRootGridWidth() || ALELastLibraryRootGridWidth <= 0) {
-		return;
-	}
-
-	CGRect fullFrame = searchController.view.bounds;
-	CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
-	CGRect rootGridFrame = CGRectZero;
-	if (ALELibraryRootGridFrameInView(searchController.view, &rootGridFrame)) {
-		CGFloat gridMinX = MIN(MAX((CGFloat)0, CGRectGetMinX(rootGridFrame)), CGRectGetWidth(fullFrame));
-		CGFloat gridWidth = MIN(CGRectGetWidth(fullFrame) - gridMinX, CGRectGetWidth(rootGridFrame));
-		gridFrame.origin.x = gridMinX;
-		gridFrame.size.width = MAX((CGFloat)0, gridWidth);
-	}
-
-	ALELayoutLibrarySearchResultsController(searchController, gridFrame);
-}
-
-static void ALELayoutLibrarySearchResultsController(SBHLibrarySearchController *searchController, CGRect gridFrame) {
-	if (ALEApplyingLibrarySearchResultsLayout || ![searchController isKindOfClass:[UIViewController class]] || !searchController.view || CGRectGetWidth(gridFrame) <= 0) {
-		return;
-	}
-
-	id searchResultsController = ALEValueForKey(searchController, @"_searchResultsController");
-	if (![searchResultsController isKindOfClass:NSClassFromString(@"SBHIconLibraryTableViewController")]) {
-		return;
-	}
-
-	UIViewController *resultsController = (UIViewController *)searchResultsController;
-	UIView *resultsView = resultsController.view;
-	if (![resultsView isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	UIView *superview = resultsView.superview;
-	if (![superview isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	CGRect targetFrame = [searchController.view convertRect:gridFrame toView:superview];
-	targetFrame.origin.y = CGRectGetMinY(resultsView.frame);
-	targetFrame.size.height = CGRectGetHeight(resultsView.frame);
-	if (CGRectGetHeight(targetFrame) <= 0) {
-		targetFrame.size.height = CGRectGetHeight(superview.bounds) - CGRectGetMinY(targetFrame);
-	}
-	BOOL needsFrameUpdate = fabs(CGRectGetMinX(resultsView.frame) - CGRectGetMinX(targetFrame)) > 0.5;
-	needsFrameUpdate = needsFrameUpdate || fabs(CGRectGetWidth(resultsView.frame) - CGRectGetWidth(targetFrame)) > 0.5;
-	if (!needsFrameUpdate) {
-		return;
-	}
-
-	ALEApplyingLibrarySearchResultsLayout = YES;
-	@try {
-		resultsView.frame = targetFrame;
-
-		UITableView *tableView = nil;
-		if ([resultsController respondsToSelector:@selector(tableView)]) {
-			tableView = [(UITableViewController *)resultsController tableView];
-		}
-		if ([tableView isKindOfClass:[UITableView class]] && tableView != resultsView) {
-			tableView.frame = resultsView.bounds;
-		}
-	} @finally {
-		ALEApplyingLibrarySearchResultsLayout = NO;
-	}
-}
-
-static BOOL ALELibraryRootGridFrameInView(UIView *view, CGRect *frame) {
-	if (![view isKindOfClass:[UIView class]] || !view.window || !frame || CGRectIsEmpty(ALELastLibraryRootGridFrameInWindow)) {
-		return NO;
-	}
-
-	CGRect convertedFrame = [view.window convertRect:ALELastLibraryRootGridFrameInWindow toView:view];
-	if (CGRectGetWidth(convertedFrame) <= 0 || CGRectGetHeight(convertedFrame) <= 0) {
-		return NO;
-	}
-
-	*frame = convertedFrame;
-	return YES;
-}
-
-static BOOL ALEHasLibraryRootGridWidth(void) {
-	if (ALELastLibraryRootGridWidth <= 0 || ALELastLibraryRootListWidth <= 0) {
-		return NO;
-	}
-
-	if (ALELastLibraryRootColumnCount != ALELibraryCategoriesRootColumnCount()) {
-		return NO;
-	}
-
-	return ALELastLibraryRootLandscape == ALEIsLandscapeScreen();
-}
-
-static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth) {
-	if (!ALEHasLibraryRootGridWidth() || referenceWidth <= 0) {
-		return 0;
-	}
-
-	CGFloat targetWidth = ALELastLibraryRootGridWidth;
-	if (targetWidth <= 0) {
-		return 0;
-	}
-
-	return targetWidth;
-}
-
-static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame) {
-	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
-		return frame;
-	}
-
-	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
-		return frame;
-	}
-
-	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
-	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
-	if (targetWidth <= 0) {
-		return frame;
-	}
-
-	CGRect rootGridFrame = CGRectZero;
-	if (ALELibraryRootGridFrameInView(searchBar.superview, &rootGridFrame)) {
-		frame.origin.x = CGRectGetMinX(rootGridFrame);
-		frame.size.width = CGRectGetWidth(rootGridFrame);
-		return frame;
-	}
-
-	frame.size.width = targetWidth;
-	frame.origin.x = (referenceWidth - targetWidth) / 2.0;
-	return frame;
-}
-
-static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint center) {
-	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
-		return center;
-	}
-
-	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
-		return center;
-	}
-
-	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
-	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
-	if (ALELibrarySearchTargetWidth(referenceWidth) <= 0) {
-		return center;
-	}
-
-	center.x = CGRectGetMidX(targetFrame);
-	return center;
-}
-
-static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bounds) {
-	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
-		return bounds;
-	}
-
-	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
-		return bounds;
-	}
-
-	CGFloat referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
-	CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
-	if (targetWidth <= 0) {
-		return bounds;
-	}
-
-	bounds.size.width = targetWidth;
-	return bounds;
-}
-
-static CGAffineTransform ALELibrarySearchTargetTransform(SBHSearchBar *searchBar, CGAffineTransform transform) {
-	if (searchBar != ALELastLibrarySearchBar || !ALELibraryPodFolderPresentedOrAnimating) {
-		return transform;
-	}
-
-	transform.a = 1.0;
-	transform.b = 0;
-	transform.c = 0;
-	transform.d = 1.0;
-	return transform;
-}
-
-static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
-	if (ALEApplyingLibrarySearchBarLayout || searchBar != ALELastLibrarySearchBar || !searchBar.superview) {
-		return;
-	}
-
-	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
-		return;
-	}
-
-	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
-	BOOL frameNeedsUpdate = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(targetFrame)) > 0.5;
-	frameNeedsUpdate = frameNeedsUpdate || fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(targetFrame)) > 0.5;
-
-	CGPoint targetCenter = ALELibrarySearchTargetCenter(searchBar, searchBar.center);
-	BOOL centerNeedsUpdate = fabs(searchBar.center.x - targetCenter.x) > 0.5;
-	BOOL transformNeedsUpdate = ALELibraryPodFolderPresentedOrAnimating && !CGAffineTransformIsIdentity(searchBar.transform);
-	if (!frameNeedsUpdate && !centerNeedsUpdate && !transformNeedsUpdate) {
-		ALELayoutLibrarySearchBarVisibleContent(searchBar);
-		return;
-	}
-
-	ALEApplyingLibrarySearchBarLayout = YES;
-	@try {
-		if (frameNeedsUpdate) {
-			[searchBar setFrame:targetFrame];
-		}
-
-		if (centerNeedsUpdate) {
-			[searchBar setCenter:targetCenter];
-		}
-
-		if (transformNeedsUpdate) {
-			[searchBar setTransform:CGAffineTransformIdentity];
-		}
-
-		ALELayoutLibrarySearchBarVisibleContent(searchBar);
-	} @finally {
-		ALEApplyingLibrarySearchBarLayout = NO;
-	}
-}
-
-static void ALEBeginLibraryPodFolderPresentation(void) {
-	ALELibraryPodFolderPresentedOrAnimating = YES;
-	ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
-}
-
-static void ALEEndLibraryPodFolderPresentation(void) {
-	ALELibraryPodFolderPresentedOrAnimating = NO;
-	ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
-}
-
-static BOOL ALEUnionVisibleBoundsInView(UIView *view, UIView *targetView, CGRect *bounds) {
-	if (![view isKindOfClass:[UIView class]] || view.hidden || view.alpha <= 0.01 || !targetView || !bounds) {
-		return NO;
-	}
-
-	BOOL hasBounds = NO;
-	CGRect viewBounds = [view convertRect:view.bounds toView:targetView];
-	if (CGRectGetWidth(viewBounds) > 1.0 && CGRectGetHeight(viewBounds) > 1.0) {
-		*bounds = viewBounds;
-		hasBounds = YES;
-	}
-
-	for (UIView *subview in view.subviews) {
-		CGRect subviewBounds = CGRectMake(0, 0, 0, 0);
-		if (!ALEUnionVisibleBoundsInView(subview, targetView, &subviewBounds)) {
-			continue;
-		}
-
-		*bounds = hasBounds ? CGRectUnion(*bounds, subviewBounds) : subviewBounds;
-		hasBounds = YES;
-	}
-
-	return hasBounds;
-}
-
-static BOOL ALELargestVisibleSubviewBoundsInView(UIView *view, UIView *targetView, CGRect *bounds) {
-	if (![view isKindOfClass:[UIView class]] || !targetView || !bounds) {
-		return NO;
-	}
-
-	BOOL hasBounds = NO;
-	CGFloat largestArea = 0;
-	for (UIView *subview in view.subviews) {
-		CGRect subviewBounds = CGRectMake(0, 0, 0, 0);
-		if (!ALEUnionVisibleBoundsInView(subview, targetView, &subviewBounds)) {
-			continue;
-		}
-
-		CGFloat area = CGRectGetWidth(subviewBounds) * CGRectGetHeight(subviewBounds);
-		if (area > largestArea) {
-			*bounds = subviewBounds;
-			largestArea = area;
-			hasBounds = YES;
-		}
-	}
-
-	return hasBounds;
-}
-
-static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]] || CGRectGetWidth(searchBar.bounds) <= 0) {
-		return;
-	}
-
-	if (ALELibrarySearchShouldUseNativeSearchBarLayout(searchBar)) {
-		return;
-	}
-
-	CGRect visibleBounds = CGRectMake(0, 0, 0, 0);
-	if (!ALELargestVisibleSubviewBoundsInView(searchBar, searchBar, &visibleBounds)) {
-		return;
-	}
-
-	CGFloat targetWidth = ALELastLibraryRootGridWidth > 0 ? ALELastLibraryRootGridWidth : CGRectGetWidth(searchBar.bounds);
-	CGFloat targetHeight = CGRectGetHeight(visibleBounds);
-	if (targetWidth <= 0 || targetHeight <= 0) {
-		return;
-	}
-
-	for (UIView *subview in searchBar.subviews) {
-		CGRect subviewBounds = CGRectMake(0, 0, 0, 0);
-		if (!ALEUnionVisibleBoundsInView(subview, searchBar, &subviewBounds)) {
-			continue;
-		}
-
-		CGFloat widthDelta = fabs(CGRectGetWidth(subviewBounds) - CGRectGetWidth(visibleBounds));
-		CGFloat heightDelta = fabs(CGRectGetHeight(subviewBounds) - CGRectGetHeight(visibleBounds));
-		if (widthDelta > 1.0 || heightDelta > 1.0) {
-			continue;
-		}
-
-		CGRect frame = subview.frame;
-		frame.origin.x = 0;
-		frame.size.width = targetWidth;
-		[subview setFrame:frame];
-	}
-}
-
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL libraryRootLayout) {
-	if (!configuration) {
-		return;
-	}
-
-	CGSize screenSize = [UIScreen mainScreen].bounds.size;
-	CGFloat width = MAX(screenSize.width, screenSize.height);
-	CGFloat height = MIN(screenSize.width, screenSize.height);
-
-	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = libraryRootLayout ? 8 : 4;
-	}
-	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = libraryRootLayout ? 6 : 3;
-	}
-	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
-		configuration.listSizeForIconSpacingCalculation = CGSizeMake(width, height);
-	}
-	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
-		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
-		insets.left = 72;
-		insets.right = 72;
-		configuration.landscapeLayoutInsets = insets;
-	}
-	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
-		UIEdgeInsets insets = configuration.portraitLayoutInsets;
-		insets.left = 48;
-		insets.right = 48;
-		configuration.portraitLayoutInsets = insets;
-	}
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
@@ -712,49 +177,37 @@ static BOOL ALEIsLandscapeScreen(void) {
 	return screenSize.width > screenSize.height;
 }
 
-static NSUInteger ALELibraryCategoriesRootColumnCount(void) {
+static unsigned long long ALELibraryRootPodColumns(void) {
 	return ALEIsLandscapeScreen() ? 4 : 3;
 }
 
-static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
-	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
-}
-
-static struct SBHIconGridSize ALELibraryCategoriesRootGridSize(struct SBHIconGridSize originalGridSize) {
+static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize, unsigned long long iconCount) {
 	struct SBHIconGridSize gridSize = originalGridSize;
+	unsigned long long podColumns = ALELibraryRootPodColumns();
+	unsigned long long podRows = iconCount > 0 ? ((iconCount + podColumns - 1) / podColumns) : (ALEIsLandscapeScreen() ? 4 : 5);
 
-	if (ALEIsLandscapeScreen()) {
-		gridSize.columns = MAX(gridSize.columns, 8);
-		gridSize.rows = MAX(gridSize.rows, 4);
-	} else {
-		gridSize.columns = MAX(gridSize.columns, 6);
-		gridSize.rows = MAX(gridSize.rows, 6);
-	}
-
+	gridSize.columns = MAX(gridSize.columns, (unsigned short)(podColumns * 2));
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)(podRows * 2));
 	return gridSize;
 }
 
-static unsigned long long ALELibraryCategoriesRootPodColumnsForGridSize(struct SBHIconGridSize gridSize) {
-	return MAX((unsigned long long)1, (unsigned long long)gridSize.columns / 2);
-}
-
-static unsigned long long ALELibraryCategoriesRootGridCellIndexForIconIndex(NSUInteger iconIndex, struct SBHIconGridSize gridSize) {
-	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
+static unsigned long long ALELibraryRootGridCellIndexForIconIndex(NSUInteger iconIndex, struct SBHIconGridSize gridSize) {
+	unsigned long long podColumns = MAX((unsigned long long)1, (unsigned long long)gridSize.columns / 2);
 	unsigned long long row = iconIndex / podColumns;
 	unsigned long long column = iconIndex % podColumns;
 	return (row * 2 * gridSize.columns) + (column * 2);
 }
 
-static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *gridCellInfo, NSUInteger iconCount, struct SBHIconGridSize gridSize) {
+static void ALEReflowLibraryRootGridCellInfo(SBIconListGridCellInfo *gridCellInfo, NSUInteger iconCount, struct SBHIconGridSize gridSize) {
 	if (!gridCellInfo || iconCount == 0 || gridSize.columns == 0) {
 		return;
 	}
 
-	gridCellInfo.gridSize = gridSize;
 	[gridCellInfo clearAllIconAndGridCellIndexes];
+	gridCellInfo.gridSize = gridSize;
 
 	for (NSUInteger iconIndex = 0; iconIndex < iconCount; iconIndex++) {
-		unsigned long long gridCellIndex = ALELibraryCategoriesRootGridCellIndexForIconIndex(iconIndex, gridSize);
+		unsigned long long gridCellIndex = ALELibraryRootGridCellIndexForIconIndex(iconIndex, gridSize);
 		[gridCellInfo setGridCellIndex:gridCellIndex forIconIndex:iconIndex];
 		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex];
 		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + 1];
@@ -762,270 +215,49 @@ static void ALEReflowLibraryCategoriesRootGridCellInfo(SBIconListGridCellInfo *g
 		[gridCellInfo setIconIndex:iconIndex forGridCellIndex:gridCellIndex + gridSize.columns + 1];
 	}
 
-	unsigned long long podColumns = ALELibraryCategoriesRootPodColumnsForGridSize(gridSize);
-	unsigned long long podRows = ((unsigned long long)iconCount + podColumns - 1) / podColumns;
+	unsigned long long podColumns = MAX((unsigned long long)1, (unsigned long long)gridSize.columns / 2);
+	unsigned long long podRows = (iconCount + podColumns - 1) / podColumns;
 	gridCellInfo.numberOfUsedColumns = MIN((unsigned long long)gridSize.columns, podColumns * 2);
 	gridCellInfo.numberOfUsedRows = MAX((unsigned long long)1, podRows * 2);
 }
 
-static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
-	if (!listView || ![listView respondsToSelector:@selector(model)]) {
-		return NO;
-	}
-
-	SBIconListModel *model = listView.model;
-	if (!model || ![model respondsToSelector:@selector(folder)]) {
-		return NO;
-	}
-
-	return ALEIsLibraryCategoriesRootFolder(model.folder);
-}
-
-static NSUInteger ALELibraryCategoriesRootRowCount(SBIconListView *listView) {
-	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)]) {
-		return 0;
-	}
-
-	NSArray *icons = listView.icons;
-	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
-		return 0;
-	}
-
-	NSUInteger columnCount = ALELibraryCategoriesRootColumnCount();
-	return ((NSUInteger)icons.count + columnCount - 1) / columnCount;
-}
-
-static NSRange ALEExpandedLibraryRootColumnRange(SBIconListView *listView, NSRange proposedRange) {
-	if (!ALEIsLibraryCategoriesRootListView(listView)) {
-		return proposedRange;
-	}
-
-	NSUInteger columnCount = ALELibraryCategoriesRootColumnCount();
-	if (columnCount == 0) {
-		return proposedRange;
-	}
-
-	return NSMakeRange(0, columnCount * 2);
-}
-
-static NSRange ALEExpandedLibraryRootRowRange(SBIconListView *listView, NSRange proposedRange) {
-	NSUInteger rowCount = ALELibraryCategoriesRootRowCount(listView);
-	if (rowCount == 0) {
-		return proposedRange;
-	}
-
-	return NSMakeRange(0, rowCount * 2);
-}
-
-static SBIconListView *ALELibraryCategoriesRootListViewInView(UIView *view) {
-	if ([view isKindOfClass:NSClassFromString(@"SBIconListView")] && ALEIsLibraryCategoriesRootListView((SBIconListView *)view)) {
-		return (SBIconListView *)view;
-	}
-
-	for (UIView *subview in view.subviews) {
-		SBIconListView *listView = ALELibraryCategoriesRootListViewInView(subview);
-		if (listView) {
-			return listView;
-		}
-	}
-
-	return nil;
-}
-
-static UIScrollView *ALEEnclosingScrollView(UIView *view) {
-	UIView *candidate = view.superview;
-	while (candidate) {
-		if ([candidate isKindOfClass:[UIScrollView class]]) {
-			return (UIScrollView *)candidate;
-		}
-		candidate = candidate.superview;
-	}
-
-	return nil;
-}
-
-static CGFloat ALEViewMinYInAncestor(UIView *view, UIView *ancestor) {
-	CGFloat minY = 0;
-	UIView *candidate = view;
-	while (candidate && candidate != ancestor) {
-		minY += CGRectGetMinY(candidate.frame);
-		candidate = candidate.superview;
-	}
-
-	return candidate == ancestor ? minY : 0;
-}
-
-static void ALEExposeLibraryCategoriesRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
-	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryCategoriesRootListView(listView) || columnCount == 0 || rowCount == 0) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
+	if (!configuration) {
 		return;
 	}
 
-	ALEUpdatingLibraryRootVisibility = YES;
-	@try {
-		if (ALELastLibraryRootVisibleListView != listView) {
-			ALELastLibraryRootVisibleListView = listView;
-			ALELastLibraryRootVisibleColumnRange = NSMakeRange(NSNotFound, 0);
-			ALELastLibraryRootVisibleRowRange = NSMakeRange(NSNotFound, 0);
-		}
+	BOOL rootLayout = ALEConfiguringLibraryRootLayout;
+	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	CGFloat landscapeWidth = MAX(screenSize.width, screenSize.height);
+	CGFloat portraitWidth = MIN(screenSize.width, screenSize.height);
+	CGSize spacingSize = CGSizeMake(landscapeWidth, portraitWidth);
 
-		NSRange visibleColumnRange = NSMakeRange(0, columnCount * 2);
-		NSRange visibleRowRange = NSMakeRange(0, rowCount * 2);
-		BOOL visibilityChanged = !NSEqualRanges(ALELastLibraryRootVisibleColumnRange, visibleColumnRange) || !NSEqualRanges(ALELastLibraryRootVisibleRowRange, visibleRowRange);
-
-		if (!visibilityChanged) {
-			return;
-		}
-
-		if ([listView respondsToSelector:@selector(setVisibleColumnRange:)]) {
-			listView.visibleColumnRange = visibleColumnRange;
-		}
-		if ([listView respondsToSelector:@selector(setVisibleRowRange:)]) {
-			listView.visibleRowRange = visibleRowRange;
-		}
-		if ([listView respondsToSelector:@selector(showAllIcons)]) {
-			[listView showAllIcons];
-		}
-		ALELastLibraryRootVisibleColumnRange = visibleColumnRange;
-		ALELastLibraryRootVisibleRowRange = visibleRowRange;
-	} @finally {
-		ALEUpdatingLibraryRootVisibility = NO;
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
+		configuration.numberOfLandscapeColumns = rootLayout ? 8 : 4;
 	}
-}
-
-static CGFloat ALELayoutLibraryCategoriesRootListView(SBIconListView *listView) {
-	if (!ALEIsLibraryCategoriesRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
-		return 0;
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeRows:)]) {
+		configuration.numberOfLandscapeRows = rootLayout ? 8 : 4;
 	}
-
-	NSArray *icons = listView.icons;
-	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
-		return 0;
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
+		configuration.numberOfPortraitColumns = rootLayout ? 6 : 3;
 	}
-
-	CGFloat listWidth = CGRectGetWidth(listView.bounds);
-	if (listWidth <= 0) {
-		listWidth = CGRectGetWidth(listView.superview.bounds);
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
+		configuration.numberOfPortraitRows = rootLayout ? 10 : 5;
 	}
-	if (listWidth <= 0) {
-		listWidth = ALEFullWidthForView(listView);
+	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
+		configuration.listSizeForIconSpacingCalculation = spacingSize;
 	}
-
-	BOOL landscape = ALEIsLandscapeScreen();
-	NSUInteger columnCount = ALELibraryCategoriesRootColumnCount();
-	CGFloat topY = CGFLOAT_MAX;
-	CGFloat secondY = CGFLOAT_MAX;
-	CGFloat podWidth = 0;
-	CGFloat podHeight = 0;
-
-	for (id icon in icons) {
-		UIView *iconView = [listView iconViewForIcon:icon];
-		if (![iconView isKindOfClass:[UIView class]] || iconView.hidden) {
-			continue;
-		}
-
-		CGRect frame = iconView.frame;
-		if (CGRectGetWidth(frame) <= 0 || CGRectGetHeight(frame) <= 0) {
-			continue;
-		}
-
-		podWidth = MAX(podWidth, CGRectGetWidth(frame));
-		podHeight = MAX(podHeight, CGRectGetHeight(frame));
-
-		CGFloat y = CGRectGetMinY(frame);
-		if (y < topY - 1.0) {
-			secondY = topY;
-			topY = y;
-		} else if (y > topY + 8.0 && y < secondY - 1.0) {
-			secondY = y;
-		}
+	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
+		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
+		insets.left = rootLayout ? MAX((CGFloat)72.0, landscapeWidth * 0.075) : MAX((CGFloat)96.0, landscapeWidth * 0.11);
+		insets.right = insets.left;
+		configuration.landscapeLayoutInsets = insets;
 	}
-
-	if (podWidth <= 0 || podHeight <= 0 || topY == CGFLOAT_MAX) {
-		return 0;
-	}
-
-	CGFloat horizontalInset = landscape ? MAX((CGFloat)122.0, listWidth * 0.075) : MAX((CGFloat)72.0, listWidth * 0.085);
-	CGFloat availableWidth = listWidth - (horizontalInset * 2.0);
-	if (availableWidth < (podWidth * columnCount)) {
-		horizontalInset = 36.0;
-		availableWidth = listWidth - (horizontalInset * 2.0);
-	}
-
-	CGFloat columnGap = columnCount > 1 ? (availableWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
-	if (columnGap < 24.0) {
-		columnGap = 24.0;
-	}
-
-	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
-	if (rowStep < podHeight + 28.0) {
-		rowStep = podHeight + 36.0;
-	}
-
-	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
-	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
-
-	ALEExposeLibraryCategoriesRootVisibleRange(listView, columnCount, rowCount);
-	CGFloat gridMinX = CGFLOAT_MAX;
-	CGFloat gridMaxX = 0;
-	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
-		UIView *iconView = [listView iconViewForIcon:icons[iconIndex]];
-		if (![iconView isKindOfClass:[UIView class]]) {
-			continue;
-		}
-
-		NSUInteger column = iconIndex % columnCount;
-		NSUInteger row = iconIndex / columnCount;
-		CGRect frame = iconView.frame;
-		if (CGRectGetWidth(frame) <= 0 || CGRectGetHeight(frame) <= 0) {
-			frame.size = CGSizeMake(podWidth, podHeight);
-		}
-		frame.origin.x = horizontalInset + ((podWidth + columnGap) * column);
-		frame.origin.y = topY + (rowStep * row);
-		iconView.frame = frame;
-		if (iconView.hidden) {
-			iconView.hidden = NO;
-		}
-		gridMinX = MIN(gridMinX, CGRectGetMinX(frame));
-		gridMaxX = MAX(gridMaxX, CGRectGetMaxX(frame));
-		maxY = MAX(maxY, CGRectGetMaxY(frame));
-	}
-
-	if (gridMinX != CGFLOAT_MAX && gridMaxX > gridMinX) {
-		ALELastLibraryRootGridMinX = gridMinX;
-		ALELastLibraryRootGridWidth = gridMaxX - gridMinX;
-		ALELastLibraryRootListWidth = listWidth;
-		ALELastLibraryRootColumnCount = columnCount;
-		ALELastLibraryRootLandscape = landscape;
-		ALELastLibraryRootGridFrameInWindow = [listView convertRect:CGRectMake(gridMinX, topY, gridMaxX - gridMinX, maxY - topY) toView:nil];
-		ALEApplyLibrarySearchBarLayout(ALELastLibrarySearchBar);
-	}
-
-	return maxY;
-}
-
-static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, CGFloat contentBottom) {
-	if (!ALEIsLibraryCategoriesRootListView(listView) || contentBottom <= 0) {
-		return;
-	}
-
-	UIScrollView *scrollView = ALEEnclosingScrollView(listView);
-	if (!scrollView) {
-		return;
-	}
-
-	CGFloat bottomPadding = ALEIsLandscapeScreen() ? 28.0 : 32.0;
-	CGFloat listMinY = ALEViewMinYInAncestor(listView, scrollView);
-	CGFloat desiredHeight = MAX(listMinY + contentBottom + bottomPadding, CGRectGetHeight(scrollView.bounds) + 1.0);
-
-	CGSize contentSize = scrollView.contentSize;
-	if (fabs(contentSize.height - desiredHeight) > 1.0) {
-		contentSize.height = desiredHeight;
-		ALEUpdatingLibraryRootScrollRange = YES;
-		@try {
-			scrollView.contentSize = contentSize;
-		} @finally {
-			ALEUpdatingLibraryRootScrollRange = NO;
-		}
+	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
+		UIEdgeInsets insets = configuration.portraitLayoutInsets;
+		insets.left = rootLayout ? MAX((CGFloat)48.0, portraitWidth * 0.08) : MAX((CGFloat)72.0, portraitWidth * 0.105);
+		insets.right = insets.left;
+		configuration.portraitLayoutInsets = insets;
 	}
 }
 
@@ -1057,160 +289,15 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 %end
 
-%hook SBHDefaultIconListLayoutProvider
-- (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
-	%orig;
-	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
-}
-- (id)makeLayoutForIconLocation:(id)iconLocation {
-	BOOL previousConfiguringLibraryRootLayout = ALEConfiguringLibraryRootLayout;
-	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
-	id layout = %orig;
-	ALEConfiguringLibraryRootLayout = previousConfiguringLibraryRootLayout;
-	return layout;
-}
-- (id)layoutForIconLocation:(id)iconLocation {
-	BOOL previousConfiguringLibraryRootLayout = ALEConfiguringLibraryRootLayout;
-	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
-	id layout = %orig;
-	ALEConfiguringLibraryRootLayout = previousConfiguringLibraryRootLayout;
-	return layout;
-}
-%end
-
-%hook SBFolder
-- (struct SBHIconGridSize)listGridSize {
-	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self)) {
-		return ALELibraryCategoriesRootGridSize(gridSize);
-	}
-
-	return gridSize;
-}
-%end
-
-%hook SBIconListModel
-- (struct SBHIconGridSize)gridSize {
-	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALELibraryCategoriesRootGridSize(gridSize);
-	}
-
-	return gridSize;
-}
-- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
-	id gridCellInfo = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		struct SBHIconGridSize rootGridSize = ALELibraryCategoriesRootGridSize(gridSize);
-		ALEReflowLibraryCategoriesRootGridCellInfo((SBIconListGridCellInfo *)gridCellInfo, self.numberOfIcons, rootGridSize);
-	}
-
-	return gridCellInfo;
-}
-%end
-
-%hook SBIconListView
-- (void)setVisibleColumnRange:(NSRange)range {
-	%orig(ALEExpandedLibraryRootColumnRange(self, range));
-}
-- (void)setVisibleRowRange:(NSRange)range {
-	%orig(ALEExpandedLibraryRootRowRange(self, range));
-}
-- (void)setFrame:(CGRect)frame {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)setBounds:(CGRect)bounds {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)layoutSubviews {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)layoutIconsIfNeeded {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)layoutIconsIfNeeded:(double)arg1 {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)layoutIconsIfNeededUsingAnimator:(id)arg1 options:(unsigned long long)arg2 {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)layoutIconsIfNeededWithAnimationType:(long long)arg1 options:(unsigned long long)arg2 {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-- (void)layoutIconsNow {
-	%orig;
-	CGFloat contentBottom = ALELayoutLibraryCategoriesRootListView(self);
-	ALEUpdateLibraryCategoriesRootScrollRange(self, contentBottom);
-}
-%end
-
-%hook UIScrollView
-- (void)setContentSize:(CGSize)contentSize {
-	%orig;
-	if (ALEUpdatingLibraryRootScrollRange) {
-		return;
-	}
-
-	SBIconListView *listView = ALELibraryCategoriesRootListViewInView(self);
-	if (!listView) {
-		return;
-	}
-
-	CGFloat contentBottom = 0;
-	if ([listView respondsToSelector:@selector(icons)] && [listView respondsToSelector:@selector(iconViewForIcon:)]) {
-		for (id icon in listView.icons) {
-			UIView *iconView = [listView iconViewForIcon:icon];
-			if ([iconView isKindOfClass:[UIView class]] && !iconView.hidden) {
-				contentBottom = MAX(contentBottom, CGRectGetMaxY(iconView.frame));
-			}
-		}
-	}
-	ALEUpdateLibraryCategoriesRootScrollRange(listView, contentBottom);
-}
-%end
-
-%hook SBHSearchBar
-- (void)setFrame:(CGRect)frame {
-	%orig(ALELibrarySearchTargetFrame(self, frame));
-}
-- (void)setBounds:(CGRect)bounds {
-	%orig(ALELibrarySearchTargetBounds(self, bounds));
-}
-- (void)setCenter:(CGPoint)center {
-	%orig(ALELibrarySearchTargetCenter(self, center));
-}
-- (void)setTransform:(CGAffineTransform)transform {
-	%orig(ALELibrarySearchTargetTransform(self, transform));
-}
-- (void)layoutSubviews {
-	%orig;
-	ALEApplyLibrarySearchBarLayout(self);
-}
-%end
-
 %hook SBHomeScreenOverlayViewController
-- (CGFloat)contentWidth {
+-(CGFloat)contentWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
 		return ALEFullWidthForView(self.view);
 	}
 
 	return %orig;
 }
-- (CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
+-(CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
 		return containerWidth;
 	}
@@ -1219,41 +306,92 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 }
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
-	ALEUpdateOverlayLayout(self);
+	if (ALEOverlayShowsAppLibrary(self)) {
+		NSLayoutConstraint *contentWidthConstraint = ALEValueForKey(self, @"contentWidthConstraint");
+		if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
+			contentWidthConstraint.constant = ALEFullWidthForView(self.view);
+		}
+	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
 }
-- (void)viewDidLayoutSubviews {
+%end
+
+%hook SBHDefaultIconListLayoutProvider
+-(void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	ALEUpdateOverlayLayout(self);
+	ALEConfigureAppLibraryGrid(configuration);
 }
-- (void)viewWillLayoutSubviews {
-	%orig;
-	ALEUpdateOverlayLayout(self);
+-(id)makeLayoutForIconLocation:(id)iconLocation {
+	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
+	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryRootLayout = previousRootLayout;
+	return layout;
+}
+-(id)layoutForIconLocation:(id)iconLocation {
+	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
+	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryRootLayout = previousRootLayout;
+	return layout;
+}
+%end
+
+%hook SBFolder
+-(struct SBHIconGridSize)listGridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self)) {
+		return ALELibraryRootGridSize(gridSize, 0);
+	}
+
+	return gridSize;
+}
+%end
+
+%hook SBIconListModel
+-(struct SBHIconGridSize)gridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryRootGridSize(gridSize, self.numberOfIcons);
+	}
+
+	return gridSize;
+}
+-(id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
+	id gridCellInfo = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		struct SBHIconGridSize rootGridSize = ALELibraryRootGridSize(gridSize, self.numberOfIcons);
+		ALEReflowLibraryRootGridCellInfo((SBIconListGridCellInfo *)gridCellInfo, self.numberOfIcons, rootGridSize);
+	}
+
+	return gridCellInfo;
 }
 %end
 
 %hook SBHLibrarySearchController
-- (void)viewDidLoad {
-	%orig;
-	ALELayoutLibrarySearchController(self, NO);
-}
-- (void)viewWillAppear:(bool)arg1 {
-	%orig;
-	ALELayoutLibrarySearchController(self, NO);
-}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(self, NO);
-}
-- (void)viewWillLayoutSubviews {
-	%orig;
-	ALELayoutLibrarySearchController(self, NO);
+	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
+	UIView *containerView = [self valueForKey:@"_containerView"];
+	UIView *contentContainerView = [self valueForKey:@"_contentContainerView"];
+	UIView *searchResultsContainerView = [self valueForKey:@"_searchResultsContainerView"];
+
+	CGRect selfFrame = self.view.frame;
+	[containerView setFrame:selfFrame];
+	[contentContainerView setFrame:selfFrame];
+	[searchResultsContainerView setFrame:selfFrame];
+
+	UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
+
+	searchTextFieldHorizontalEdgeInsets.left = 23;
+	searchTextFieldHorizontalEdgeInsets.right = 23;
+
+	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
 }
 - (void)_layoutSearchViews {
 	%orig;
-	ALELayoutLibrarySearchController(self, YES);
-	MTMaterialView *searchBackdropView = ALEValueForKey(self, @"_searchBackdropView");
+	MTMaterialView *searchBackdropView = [self valueForKey:@"_searchBackdropView"];
 
 	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
 	CGFloat height = [[UIScreen mainScreen] bounds].size.height;
@@ -1267,57 +405,22 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
 }
-- (void)setActive:(bool)active animated:(bool)animated {
-	BOOL pulledForSearch = ALELibraryRootIsPulledForSearch();
-	ALELibrarySearchActivating = active && pulledForSearch;
-	%orig;
-	ALELibrarySearchEditingActive = active && !pulledForSearch && ALEViewContainsActiveTextField(ALELastLibrarySearchBar);
-	ALELayoutLibrarySearchController(self, NO);
-	ALELibrarySearchActivating = NO;
-	if (!active) {
-		ALELibrarySearchEditingActive = NO;
-	}
-}
-%end
-
-%hook SBHIconLibraryTableViewController
-- (void)viewDidLayoutSubviews {
-	%orig;
-	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
-	id searchResultsController = ALEValueForKey(searchController, @"_searchResultsController");
-	if (searchResultsController == self) {
-		ALELayoutLibrarySearchResultsControllerIfNeeded(searchController);
-	}
-}
 %end
 
 %hook SBHLibraryPodFolderController
-- (void)viewWillAppear:(bool)arg1 {
-	ALEBeginLibraryPodFolderPresentation();
-	%orig;
-}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
 }
-- (void)viewWillDisappear:(bool)arg1 {
-	ALEBeginLibraryPodFolderPresentation();
-	%orig;
-}
-- (void)viewDidDisappear:(bool)arg1 {
-	%orig;
-	ALEEndLibraryPodFolderPresentation();
-}
 %end
 
 extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature);
 %hookf(bool, _os_feature_enabled_impl, const char *domain, const char *feature) {
-	if (strcmp(domain, "SpringBoard") == 0 && strcmp(feature, "Dewey") == 0) {
-		return true;
-	}
-	return %orig;
+    if (strcmp(domain, "SpringBoard") == 0 && strcmp(feature, "Dewey") == 0)
+        return true;
+    return %orig;
 }
 
 %ctor {
