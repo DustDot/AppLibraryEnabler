@@ -120,13 +120,13 @@ static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibrarySearchActivating = NO;
 static BOOL ALELibrarySearchEditingActive = NO;
-static CGRect ALELastLibrarySearchGridFrame = CGRectZero;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
 static NSUInteger ALELibraryCategoriesRootColumnCount(void);
 static BOOL ALEHasLibraryRootGridWidth(void);
 static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar);
+static CGFloat ALELibrarySearchTargetWidth(CGFloat referenceWidth);
 static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame);
 static void ALELayoutLibrarySearchBarVisibleContent(SBHSearchBar *searchBar);
 static BOOL ALELibrarySearchIsActive(void);
@@ -248,8 +248,16 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	[searchResultsContainerView setFrame:fullFrame];
 	if (constrainSearchResults && ALELibrarySearchIsActive() && ALEHasLibraryRootGridWidth() && ALELastLibraryRootGridWidth > 0) {
 		CGRect gridFrame = ALELibraryRootGridFrameForBounds(fullFrame);
-		if (!CGRectIsEmpty(ALELastLibrarySearchGridFrame) && CGRectGetWidth(ALELastLibrarySearchGridFrame) > 0) {
-			gridFrame = ALELastLibrarySearchGridFrame;
+		UIView *referenceView = searchController.view;
+		CGFloat referenceWidth = CGRectGetWidth(searchController.view.bounds);
+		if ([searchBar isKindOfClass:[UIView class]] && searchBar.superview) {
+			referenceView = searchBar.superview;
+			referenceWidth = CGRectGetWidth(searchBar.superview.bounds);
+		}
+		CGFloat targetWidth = ALELibrarySearchTargetWidth(referenceWidth);
+		if (targetWidth > 0) {
+			CGRect targetFrame = CGRectMake((referenceWidth - targetWidth) / 2.0, 0, targetWidth, CGRectGetHeight(fullFrame));
+			gridFrame = [referenceView convertRect:targetFrame toView:searchController.view];
 			gridFrame.origin.y = CGRectGetMinY(fullFrame);
 			gridFrame.size.height = CGRectGetHeight(fullFrame);
 		}
@@ -476,13 +484,6 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 	}
 
 	CGRect targetFrame = ALELibrarySearchTargetFrame(searchBar, searchBar.frame);
-	SBHLibrarySearchController *searchController = ALELastLibrarySearchController;
-	if ([searchController isKindOfClass:[UIViewController class]] && searchController.view) {
-		ALELastLibrarySearchGridFrame = [searchBar.superview convertRect:targetFrame toView:searchController.view];
-	} else {
-		ALELastLibrarySearchGridFrame = targetFrame;
-	}
-
 	BOOL frameNeedsUpdate = fabs(CGRectGetMinX(searchBar.frame) - CGRectGetMinX(targetFrame)) > 0.5;
 	frameNeedsUpdate = frameNeedsUpdate || fabs(CGRectGetWidth(searchBar.frame) - CGRectGetWidth(targetFrame)) > 0.5;
 
