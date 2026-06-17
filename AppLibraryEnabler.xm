@@ -271,7 +271,7 @@ static BOOL ALESearchBarIsInsideLibrarySearchController(SBHSearchBar *searchBar)
 	return NO;
 }
 
-static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController) {
+static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchController, BOOL constrainSearchContent) {
 	if (!searchController.view) {
 		return;
 	}
@@ -288,8 +288,13 @@ static void ALELayoutLibrarySearchController(SBHLibrarySearchController *searchC
 	CGRect fullFrame = searchController.view.bounds;
 	CGRect contentFrame = ALELibrarySearchContentFrame(fullFrame);
 	[containerView setFrame:fullFrame];
-	ALESetLibrarySearchSubviewFrame(contentContainerView, searchController.view, contentFrame);
-	ALESetLibrarySearchSubviewFrame(searchResultsContainerView, searchController.view, contentFrame);
+	if (constrainSearchContent) {
+		ALESetLibrarySearchSubviewFrame(contentContainerView, searchController.view, contentFrame);
+		ALESetLibrarySearchSubviewFrame(searchResultsContainerView, searchController.view, contentFrame);
+	} else {
+		[contentContainerView setFrame:fullFrame];
+		[searchResultsContainerView setFrame:fullFrame];
+	}
 
 	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] && [searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
 		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
@@ -1094,23 +1099,23 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 %hook SBHLibrarySearchController
 - (void)viewDidLoad {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)viewWillLayoutSubviews {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, NO);
 }
 - (void)_layoutSearchViews {
 	%orig;
-	ALELayoutLibrarySearchController(self);
+	ALELayoutLibrarySearchController(self, YES);
 	MTMaterialView *searchBackdropView = ALEValueForKey(self, @"_searchBackdropView");
 
 	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
