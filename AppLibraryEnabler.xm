@@ -119,6 +119,7 @@ static SBHSearchBar *ALELastLibrarySearchBar = nil;
 static SBHLibrarySearchController *ALELastLibrarySearchController = nil;
 static BOOL ALEApplyingLibrarySearchBarLayout = NO;
 static BOOL ALELibrarySearchActivating = NO;
+static BOOL ALELibrarySearchEditingActive = NO;
 static BOOL ALELibraryPodFolderPresentedOrAnimating = NO;
 
 static BOOL ALEIsLandscapeScreen(void);
@@ -131,6 +132,7 @@ static BOOL ALELibrarySearchResultsAreVisible(void);
 static BOOL ALELibraryRootIsPulledForSearch(void);
 static BOOL ALEViewContainsActiveTextField(UIView *view);
 static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar);
+static BOOL ALELibrarySearchShouldUseNativeSearchBarFrame(SBHSearchBar *searchBar);
 static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame);
 static void ALEConstrainLibrarySearchResultsView(UIView *view, CGRect gridFrame, CGRect fullFrame);
 static UIScrollView *ALEEnclosingScrollView(UIView *view);
@@ -317,7 +319,11 @@ static BOOL ALEViewContainsActiveTextField(UIView *view) {
 
 static BOOL ALELibrarySearchShouldUseNativeSearchBarLayout(SBHSearchBar *searchBar) {
 	BOOL pulledSearchVisible = ALELibrarySearchResultsAreVisible() && ALELibraryRootIsPulledForSearch();
-	return ALELibrarySearchActivating || pulledSearchVisible || ALEViewContainsActiveTextField(searchBar);
+	return ALELibrarySearchIsActive() || ALELibrarySearchActivating || pulledSearchVisible || ALEViewContainsActiveTextField(searchBar);
+}
+
+static BOOL ALELibrarySearchShouldUseNativeSearchBarFrame(SBHSearchBar *searchBar) {
+	return ALELibrarySearchEditingActive && ALEViewContainsActiveTextField(searchBar);
 }
 
 static CGRect ALELibraryRootGridFrameForBounds(CGRect fullFrame) {
@@ -390,7 +396,7 @@ static CGRect ALELibrarySearchTargetFrame(SBHSearchBar *searchBar, CGRect frame)
 		return frame;
 	}
 
-	if (ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
 		return frame;
 	}
 
@@ -410,7 +416,7 @@ static CGPoint ALELibrarySearchTargetCenter(SBHSearchBar *searchBar, CGPoint cen
 		return center;
 	}
 
-	if (ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
 		return center;
 	}
 
@@ -429,7 +435,7 @@ static CGRect ALELibrarySearchTargetBounds(SBHSearchBar *searchBar, CGRect bound
 		return bounds;
 	}
 
-	if (ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
 		return bounds;
 	}
 
@@ -460,7 +466,7 @@ static void ALEApplyLibrarySearchBarLayout(SBHSearchBar *searchBar) {
 		return;
 	}
 
-	if (ALEViewContainsActiveTextField(searchBar)) {
+	if (ALELibrarySearchShouldUseNativeSearchBarFrame(searchBar)) {
 		return;
 	}
 
@@ -1186,10 +1192,15 @@ static void ALEUpdateLibraryCategoriesRootScrollRange(SBIconListView *listView, 
 	[searchBackdropView setFrame:fullScreenFrame];
 }
 - (void)setActive:(bool)active animated:(bool)animated {
-	ALELibrarySearchActivating = active && ALELibraryRootIsPulledForSearch();
+	BOOL pulledForSearch = ALELibraryRootIsPulledForSearch();
+	ALELibrarySearchActivating = active && pulledForSearch;
 	%orig;
+	ALELibrarySearchEditingActive = active && !pulledForSearch && ALEViewContainsActiveTextField(ALELastLibrarySearchBar);
 	ALELayoutLibrarySearchController(self);
 	ALELibrarySearchActivating = NO;
+	if (!active) {
+		ALELibrarySearchEditingActive = NO;
+	}
 }
 %end
 
