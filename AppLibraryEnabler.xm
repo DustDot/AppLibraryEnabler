@@ -82,12 +82,6 @@ struct SBHIconGridSize {
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
 
-@interface SBIconListView : UIView
-@property (nonatomic, readonly) SBIconListModel *model;
-@property (nonatomic, readonly, copy) NSArray *icons;
-- (id)iconViewForIcon:(id)icon;
-@end
-
 @interface SBIconListGridCellInfo : NSObject
 @property (nonatomic) struct SBHIconGridSize gridSize;
 @property (nonatomic) unsigned long long numberOfUsedColumns;
@@ -98,7 +92,6 @@ struct SBHIconGridSize {
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
-static BOOL ALELayingOutLibraryRootList = NO;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -226,105 +219,6 @@ static void ALEReflowLibraryRootGridCellInfo(SBIconListGridCellInfo *gridCellInf
 	unsigned long long podRows = (iconCount + podColumns - 1) / podColumns;
 	gridCellInfo.numberOfUsedColumns = MIN((unsigned long long)gridSize.columns, podColumns * 2);
 	gridCellInfo.numberOfUsedRows = MAX((unsigned long long)1, podRows * 2);
-}
-
-static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
-	if (!listView || ![listView respondsToSelector:@selector(model)]) {
-		return NO;
-	}
-
-	SBIconListModel *model = listView.model;
-	if (!model || ![model respondsToSelector:@selector(folder)]) {
-		return NO;
-	}
-
-	return ALEIsLibraryCategoriesRootFolder(model.folder);
-}
-
-static void ALELayoutLibraryRootListView(SBIconListView *listView) {
-	if (ALELayingOutLibraryRootList || !ALEIsLibraryRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
-		return;
-	}
-
-	NSArray *icons = listView.icons;
-	if (![icons isKindOfClass:[NSArray class]] || icons.count == 0) {
-		return;
-	}
-
-	CGFloat listWidth = CGRectGetWidth(listView.bounds);
-	if (listWidth <= 0) {
-		listWidth = CGRectGetWidth(listView.superview.bounds);
-	}
-	if (listWidth <= 0) {
-		listWidth = ALEFullWidthForView(listView);
-	}
-
-	BOOL landscape = ALEIsLandscapeScreen();
-	NSUInteger columnCount = ALELibraryRootPodColumns();
-	CGFloat topY = CGFLOAT_MAX;
-	CGFloat secondY = CGFLOAT_MAX;
-	CGFloat podWidth = 0;
-	CGFloat podHeight = 0;
-
-	for (id icon in icons) {
-		UIView *iconView = [listView iconViewForIcon:icon];
-		if (![iconView isKindOfClass:[UIView class]] || iconView.hidden) {
-			continue;
-		}
-
-		CGRect frame = iconView.frame;
-		if (CGRectGetWidth(frame) <= 0 || CGRectGetHeight(frame) <= 0) {
-			continue;
-		}
-
-		podWidth = MAX(podWidth, CGRectGetWidth(frame));
-		podHeight = MAX(podHeight, CGRectGetHeight(frame));
-
-		CGFloat y = CGRectGetMinY(frame);
-		if (y < topY - 1.0) {
-			secondY = topY;
-			topY = y;
-		} else if (y > topY + 8.0 && y < secondY - 1.0) {
-			secondY = y;
-		}
-	}
-
-	if (podWidth <= 0 || podHeight <= 0 || topY == CGFLOAT_MAX) {
-		return;
-	}
-
-	CGFloat horizontalInset = landscape ? MAX((CGFloat)122.0, listWidth * 0.075) : MAX((CGFloat)72.0, listWidth * 0.085);
-	CGFloat availableWidth = listWidth - (horizontalInset * 2.0);
-	if (availableWidth < (podWidth * columnCount)) {
-		horizontalInset = 36.0;
-		availableWidth = listWidth - (horizontalInset * 2.0);
-	}
-
-	CGFloat columnGap = columnCount > 1 ? (availableWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
-	if (columnGap < 24.0) {
-		columnGap = 24.0;
-	}
-
-	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
-	if (rowStep < podHeight + 28.0) {
-		rowStep = podHeight + 36.0;
-	}
-
-	ALELayingOutLibraryRootList = YES;
-	for (NSUInteger iconIndex = 0; iconIndex < icons.count; iconIndex++) {
-		UIView *iconView = [listView iconViewForIcon:[icons objectAtIndex:iconIndex]];
-		if (![iconView isKindOfClass:[UIView class]] || iconView.hidden) {
-			continue;
-		}
-
-		NSUInteger column = iconIndex % columnCount;
-		NSUInteger row = iconIndex / columnCount;
-		CGRect frame = iconView.frame;
-		frame.origin.x = horizontalInset + ((podWidth + columnGap) * column);
-		frame.origin.y = topY + (rowStep * row);
-		iconView.frame = frame;
-	}
-	ALELayingOutLibraryRootList = NO;
 }
 
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
@@ -472,33 +366,6 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	}
 
 	return gridCellInfo;
-}
-%end
-
-%hook SBIconListView
-- (void)layoutSubviews {
-	%orig;
-	ALELayoutLibraryRootListView(self);
-}
-- (void)layoutIconsNow {
-	%orig;
-	ALELayoutLibraryRootListView(self);
-}
-- (void)layoutIconsIfNeeded {
-	%orig;
-	ALELayoutLibraryRootListView(self);
-}
-- (void)layoutIconsIfNeeded:(double)arg1 {
-	%orig;
-	ALELayoutLibraryRootListView(self);
-}
-- (void)layoutIconsIfNeededUsingAnimator:(id)arg1 options:(unsigned long long)arg2 {
-	%orig;
-	ALELayoutLibraryRootListView(self);
-}
-- (void)layoutIconsIfNeeded:(double)arg1 animationType:(long long)arg2 options:(unsigned long long)arg3 {
-	%orig;
-	ALELayoutLibraryRootListView(self);
 }
 %end
 
