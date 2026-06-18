@@ -85,10 +85,7 @@ struct SBHIconGridSize {
 @interface SBIconListView : UIView
 @property (nonatomic, readonly) SBIconListModel *model;
 @property (nonatomic, readonly, copy) NSArray *icons;
-@property (nonatomic) NSRange visibleColumnRange;
-@property (nonatomic) NSRange visibleRowRange;
 - (id)iconViewForIcon:(id)icon;
-- (void)showAllIcons;
 @end
 
 @interface SBIconListGridCellInfo : NSObject
@@ -102,7 +99,6 @@ struct SBHIconGridSize {
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALELayingOutLibraryRootList = NO;
-static BOOL ALEUpdatingLibraryRootVisibility = NO;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -184,38 +180,12 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
-	NSNumber *orientationValue = ALEValueForKey([UIApplication sharedApplication], @"statusBarOrientation");
-	if ([orientationValue isKindOfClass:[NSNumber class]]) {
-		UIInterfaceOrientation orientation = (UIInterfaceOrientation)[orientationValue integerValue];
-		return UIInterfaceOrientationIsLandscape(orientation);
-	}
-
 	CGSize screenSize = [UIScreen mainScreen].bounds.size;
 	return screenSize.width > screenSize.height;
 }
 
-static BOOL ALEIsLandscapeForView(UIView *view) {
-	if ([view isKindOfClass:[UIView class]]) {
-		CGSize windowSize = view.window.bounds.size;
-		if (windowSize.width > 0 && windowSize.height > 0 && fabs(windowSize.width - windowSize.height) > 1.0) {
-			return windowSize.width > windowSize.height;
-		}
-
-		CGSize boundsSize = view.bounds.size;
-		if (boundsSize.width > 0 && boundsSize.height > 0 && fabs(boundsSize.width - boundsSize.height) > 1.0) {
-			return boundsSize.width > boundsSize.height;
-		}
-	}
-
-	return ALEIsLandscapeScreen();
-}
-
-static unsigned long long ALELibraryRootPodColumnsForLandscape(BOOL landscape) {
-	return landscape ? 4 : 3;
-}
-
 static unsigned long long ALELibraryRootPodColumns(void) {
-	return ALELibraryRootPodColumnsForLandscape(ALEIsLandscapeScreen());
+	return ALEIsLandscapeScreen() ? 4 : 3;
 }
 
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize, unsigned long long iconCount) {
@@ -271,30 +241,6 @@ static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
 	return ALEIsLibraryCategoriesRootFolder(model.folder);
 }
 
-static void ALEExposeLibraryRootVisibleRange(SBIconListView *listView, NSUInteger columnCount, NSUInteger rowCount) {
-	if (ALEUpdatingLibraryRootVisibility || !ALEIsLibraryRootListView(listView) || columnCount == 0 || rowCount == 0) {
-		return;
-	}
-
-	ALEUpdatingLibraryRootVisibility = YES;
-	@try {
-		NSRange visibleColumnRange = NSMakeRange(0, columnCount * 2);
-		NSRange visibleRowRange = NSMakeRange(0, rowCount * 2);
-
-		if ([listView respondsToSelector:@selector(setVisibleColumnRange:)]) {
-			listView.visibleColumnRange = visibleColumnRange;
-		}
-		if ([listView respondsToSelector:@selector(setVisibleRowRange:)]) {
-			listView.visibleRowRange = visibleRowRange;
-		}
-		if ([listView respondsToSelector:@selector(showAllIcons)]) {
-			[listView showAllIcons];
-		}
-	} @finally {
-		ALEUpdatingLibraryRootVisibility = NO;
-	}
-}
-
 static void ALELayoutLibraryRootListView(SBIconListView *listView) {
 	if (ALELayingOutLibraryRootList || !ALEIsLibraryRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
 		return;
@@ -313,11 +259,8 @@ static void ALELayoutLibraryRootListView(SBIconListView *listView) {
 		listWidth = ALEFullWidthForView(listView);
 	}
 
-	BOOL landscape = ALEIsLandscapeForView(listView);
-	NSUInteger columnCount = ALELibraryRootPodColumnsForLandscape(landscape);
-	NSUInteger rowCount = ((NSUInteger)icons.count + columnCount - 1) / columnCount;
-	ALEExposeLibraryRootVisibleRange(listView, columnCount, rowCount);
-
+	BOOL landscape = ALEIsLandscapeScreen();
+	NSUInteger columnCount = ALELibraryRootPodColumns();
 	CGFloat topY = CGFLOAT_MAX;
 	CGFloat secondY = CGFLOAT_MAX;
 	CGFloat podWidth = 0;
