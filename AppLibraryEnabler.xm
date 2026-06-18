@@ -83,6 +83,14 @@ struct SBHIconGridSizeClassSizes {
 - (struct SBHIconGridSize)listGridSize;
 @end
 
+@interface SBHLibraryCategoryFolder : SBFolder
+- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
+@end
+
+@interface SBHLibraryCategory : NSObject
+- (SBHLibraryCategoryFolder *)expandedPodFolder;
+@end
+
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) SBFolder *folder;
 @property (nonatomic, readonly) unsigned long long numberOfIcons;
@@ -91,6 +99,8 @@ struct SBHIconGridSizeClassSizes {
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
+static char ALEExpandedLibraryCategoryFolderKey;
+static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth = 0;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -172,6 +182,14 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
+	NSNumber *orientationValue = ALEValueForKey([UIApplication sharedApplication], @"statusBarOrientation");
+	if ([orientationValue isKindOfClass:[NSNumber class]]) {
+		UIInterfaceOrientation orientation = (UIInterfaceOrientation)[orientationValue integerValue];
+		if (orientation != UIInterfaceOrientationUnknown) {
+			return UIInterfaceOrientationIsLandscape(orientation);
+		}
+	}
+
 	CGSize screenSize = [UIScreen mainScreen].bounds.size;
 	return screenSize.width > screenSize.height;
 }
@@ -188,6 +206,30 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize orig
 	gridSize.columns = MAX(gridSize.columns, (unsigned short)podColumns);
 	gridSize.rows = MAX(gridSize.rows, (unsigned short)podRows);
 	return gridSize;
+}
+
+static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconGridSize originalGridSize) {
+	struct SBHIconGridSize gridSize = originalGridSize;
+
+	if (ALEIsLandscapeScreen()) {
+		gridSize.columns = MAX(gridSize.columns, (unsigned short)6);
+		gridSize.rows = MAX(gridSize.rows, (unsigned short)4);
+	} else {
+		gridSize.columns = MAX(gridSize.columns, (unsigned short)4);
+		gridSize.rows = MAX(gridSize.rows, (unsigned short)5);
+	}
+
+	return gridSize;
+}
+
+static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
+	return [objc_getAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey) boolValue];
+}
+
+static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
+	if (folder) {
+		objc_setAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	}
 }
 
 static void ALEConfigureLibraryRootGridSizeClasses(SBIconListGridLayoutConfiguration *configuration) {
@@ -324,11 +366,43 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 }
 %end
 
+%hook SBHLibraryCategory
+-(SBHLibraryCategoryFolder *)expandedPodFolder {
+	ALEBuildingExpandedLibraryCategoryFolderDepth++;
+	SBHLibraryCategoryFolder *folder = nil;
+	@try {
+		folder = %orig;
+	} @finally {
+		ALEBuildingExpandedLibraryCategoryFolderDepth--;
+	}
+	ALEMarkExpandedLibraryCategoryFolder(folder);
+	return folder;
+}
+%end
+
+%hook SBHLibraryCategoryFolder
+-(id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier {
+	BOOL buildingExpandedFolder = ALEBuildingExpandedLibraryCategoryFolderDepth > 0;
+	if (buildingExpandedFolder) {
+		listGridSize = ALEExpandedLibraryCategoryGridSize(listGridSize);
+	}
+
+	id folder = %orig(displayName, maxListCount, listGridSize, libraryCategoryIdentifier);
+	if (buildingExpandedFolder) {
+		ALEMarkExpandedLibraryCategoryFolder(folder);
+	}
+	return folder;
+}
+%end
+
 %hook SBFolder
 -(struct SBHIconGridSize)listGridSize {
 	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self)) {
 		return ALELibraryRootGridSize(gridSize);
+	}
+	if (ALEIsExpandedLibraryCategoryFolder(self)) {
+		return ALEExpandedLibraryCategoryGridSize(gridSize);
 	}
 
 	return gridSize;
@@ -341,6 +415,9 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		return ALELibraryRootGridSize(gridSize);
 	}
+	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
+		return ALEExpandedLibraryCategoryGridSize(gridSize);
+	}
 
 	return gridSize;
 }
@@ -348,6 +425,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		struct SBHIconGridSize rootGridSize = ALELibraryRootGridSize(gridSize);
 		return %orig(rootGridSize, options);
+	}
+	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
+		struct SBHIconGridSize expandedGridSize = ALEExpandedLibraryCategoryGridSize(gridSize);
+		return %orig(expandedGridSize, options);
 	}
 
 	return %orig;
