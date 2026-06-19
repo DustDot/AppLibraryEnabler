@@ -56,15 +56,6 @@
 + (id)iconLocation;
 @end
 
-@interface SBIconController : NSObject
-+ (id)sharedInstance;
-- (id)iconManager;
-@end
-
-@interface SBHIconManager : NSObject
-- (long long)interfaceOrientation;
-@end
-
 struct SBHIconGridSize {
 	unsigned short columns;
 	unsigned short rows;
@@ -90,7 +81,6 @@ struct SBHIconGridSizeClassSizes {
 
 @interface SBFolder : NSObject
 - (struct SBHIconGridSize)listGridSize;
-- (struct SBHIconGridSizeClassSizes)iconGridSizeClassSizes;
 @end
 
 @interface SBHLibraryCategoryFolder : SBFolder
@@ -102,11 +92,8 @@ struct SBHIconGridSizeClassSizes {
 @end
 
 @interface SBIconListModel : NSObject
-+ (id)iconGridCellInfoForIcons:(id)icons gridSize:(struct SBHIconGridSize)gridSize gridSizeClassSizes:(struct SBHIconGridSizeClassSizes)gridSizeClassSizes options:(unsigned long long)options;
 @property (nonatomic, readonly) SBFolder *folder;
 @property (nonatomic, readonly) unsigned long long numberOfIcons;
-@property (nonatomic, readonly, copy) NSArray *icons;
-- (struct SBHIconGridSizeClassSizes)iconGridSizeClassSizes;
 - (struct SBHIconGridSize)gridSize;
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
@@ -194,32 +181,25 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
-static struct SBHIconGridSizeClassSizes ALEOneCellGridSizeClassSizes(struct SBHIconGridSizeClassSizes sizes) {
-	struct SBHIconGridSize oneCell = { 1, 1 };
-	sizes.small = oneCell;
-	sizes.medium = oneCell;
-	sizes.large = oneCell;
-	sizes.extraLarge = oneCell;
-	return sizes;
+static CGSize ALECurrentInterfaceSize(void) {
+	UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+	if (keyWindow && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
+		return keyWindow.bounds.size;
+	}
+
+	for (UIWindow *window in [UIApplication sharedApplication].windows) {
+		if (window && !CGSizeEqualToSize(window.bounds.size, CGSizeZero)) {
+			return window.bounds.size;
+		}
+	}
+
+	return [UIScreen mainScreen].bounds.size;
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
-	Class iconControllerClass = NSClassFromString(@"SBIconController");
-	if (iconControllerClass && [iconControllerClass respondsToSelector:@selector(sharedInstance)]) {
-		id iconController = [iconControllerClass sharedInstance];
-		id iconManager = nil;
-		if ([iconController respondsToSelector:@selector(iconManager)]) {
-			iconManager = [iconController iconManager];
-		} else {
-			iconManager = ALEValueForKey(iconController, @"iconManager");
-		}
-
-		if ([iconManager respondsToSelector:@selector(interfaceOrientation)]) {
-			long long orientation = [iconManager interfaceOrientation];
-			if (orientation > 0) {
-				return UIInterfaceOrientationIsLandscape((UIInterfaceOrientation)orientation);
-			}
-		}
+	CGSize interfaceSize = ALECurrentInterfaceSize();
+	if (interfaceSize.width != interfaceSize.height) {
+		return interfaceSize.width > interfaceSize.height;
 	}
 
 	NSNumber *orientationValue = ALEValueForKey([UIApplication sharedApplication], @"statusBarOrientation");
@@ -230,8 +210,7 @@ static BOOL ALEIsLandscapeScreen(void) {
 		}
 	}
 
-	CGSize screenSize = [UIScreen mainScreen].bounds.size;
-	return screenSize.width > screenSize.height;
+	return interfaceSize.width > interfaceSize.height;
 }
 
 static unsigned long long ALELibraryRootPodColumns(void) {
@@ -243,8 +222,8 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize orig
 	unsigned long long podColumns = ALELibraryRootPodColumns();
 	unsigned long long podRows = ALEIsLandscapeScreen() ? 4 : 5;
 
-	gridSize.columns = MAX(gridSize.columns, (unsigned short)podColumns);
-	gridSize.rows = MAX(gridSize.rows, (unsigned short)podRows);
+	gridSize.columns = MAX(gridSize.columns, (unsigned short)(podColumns * 2));
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)(podRows * 2));
 	return gridSize;
 }
 
@@ -272,36 +251,28 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 	}
 }
 
-static void ALEConfigureLibraryRootGridSizeClasses(SBIconListGridLayoutConfiguration *configuration) {
-	if (!configuration || ![configuration respondsToSelector:@selector(setIconGridSizeClassSizes:)]) {
-		return;
-	}
-
-	configuration.iconGridSizeClassSizes = ALEOneCellGridSizeClassSizes(configuration.iconGridSizeClassSizes);
-}
-
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
 	if (!configuration) {
 		return;
 	}
 
 	BOOL rootLayout = ALEConfiguringLibraryRootLayout;
-	CGSize screenSize = [UIScreen mainScreen].bounds.size;
+	CGSize screenSize = ALECurrentInterfaceSize();
 	CGFloat landscapeWidth = MAX(screenSize.width, screenSize.height);
 	CGFloat portraitWidth = MIN(screenSize.width, screenSize.height);
-	CGSize spacingSize = CGSizeMake(landscapeWidth, portraitWidth);
+	CGSize spacingSize = ALEIsLandscapeScreen() ? CGSizeMake(landscapeWidth, portraitWidth) : CGSizeMake(portraitWidth, landscapeWidth);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = 4;
+		configuration.numberOfLandscapeColumns = rootLayout ? 8 : 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeRows:)]) {
-		configuration.numberOfLandscapeRows = rootLayout ? 4 : 4;
+		configuration.numberOfLandscapeRows = rootLayout ? 8 : 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = 3;
+		configuration.numberOfPortraitColumns = rootLayout ? 6 : 3;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
-		configuration.numberOfPortraitRows = rootLayout ? 5 : 5;
+		configuration.numberOfPortraitRows = rootLayout ? 10 : 5;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
 		configuration.listSizeForIconSpacingCalculation = spacingSize;
@@ -317,9 +288,6 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 		insets.left = rootLayout ? MAX((CGFloat)48.0, portraitWidth * 0.08) : MAX((CGFloat)72.0, portraitWidth * 0.105);
 		insets.right = insets.left;
 		configuration.portraitLayoutInsets = insets;
-	}
-	if (rootLayout) {
-		ALEConfigureLibraryRootGridSizeClasses(configuration);
 	}
 }
 
@@ -441,25 +409,9 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 
 	return gridSize;
 }
--(struct SBHIconGridSizeClassSizes)iconGridSizeClassSizes {
-	struct SBHIconGridSizeClassSizes sizes = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self)) {
-		return ALEOneCellGridSizeClassSizes(sizes);
-	}
-
-	return sizes;
-}
 %end
 
 %hook SBIconListModel
--(struct SBHIconGridSizeClassSizes)iconGridSizeClassSizes {
-	struct SBHIconGridSizeClassSizes sizes = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALEOneCellGridSizeClassSizes(sizes);
-	}
-
-	return sizes;
-}
 -(struct SBHIconGridSize)gridSize {
 	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
@@ -474,8 +426,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 -(id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		struct SBHIconGridSize rootGridSize = ALELibraryRootGridSize(gridSize);
-		struct SBHIconGridSizeClassSizes sizes = ALEOneCellGridSizeClassSizes([self iconGridSizeClassSizes]);
-		return [[self class] iconGridCellInfoForIcons:self.icons gridSize:rootGridSize gridSizeClassSizes:sizes options:options];
+		return %orig(rootGridSize, options);
 	}
 	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
 		struct SBHIconGridSize expandedGridSize = ALEExpandedLibraryCategoryGridSize(gridSize);
