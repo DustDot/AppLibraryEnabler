@@ -56,6 +56,11 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+@interface SBHLibraryPodFolderView : UIView
+@property (assign,nonatomic) BOOL centersContentIfPossible;
+- (CGSize)_iconListViewSize;
+@end
+
 @interface SBHLibraryPodFolderController (AppLibraryEnabler)
 + (id)iconLocation;
 @end
@@ -574,6 +579,25 @@ static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
 	if ([searchBar isKindOfClass:[UIView class]]) {
 		searchBar.frame = ALELibrarySearchBarFrame(searchBar, searchBar.frame);
 	}
+}
+%end
+
+%hook SBHLibraryPodFolderView
+-(BOOL)centersContentIfPossible {
+	return YES;
+}
+-(void)setCentersContentIfPossible:(BOOL)centersContentIfPossible {
+	%orig(YES);
+}
+-(CGSize)_iconListViewSize {
+	CGSize size = %orig;
+	CGFloat interfaceWidth = ALEInterfaceWidthForView(self);
+	CGFloat targetWidth = ALELibraryRootContentWidth(interfaceWidth);
+	if (targetWidth > 0 && targetWidth < size.width) {
+		size.width = targetWidth;
+	}
+
+	return size;
 }
 %end
 
