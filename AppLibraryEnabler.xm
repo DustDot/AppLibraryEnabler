@@ -79,6 +79,10 @@ struct SBHIconGridSizeClassSizes {
 @property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
 @end
 
+@interface SBIconListGridLayout : NSObject
+@property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
+@end
+
 @interface SBFolder : NSObject
 - (struct SBHIconGridSize)listGridSize;
 @end
@@ -258,12 +262,11 @@ static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
 	}
 }
 
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL rootLayout) {
 	if (!configuration) {
 		return;
 	}
 
-	BOOL rootLayout = ALEConfiguringLibraryRootLayout;
 	CGSize screenSize = ALECurrentInterfaceSize();
 	CGFloat landscapeWidth = MAX(screenSize.width, screenSize.height);
 	CGFloat portraitWidth = MIN(screenSize.width, screenSize.height);
@@ -296,6 +299,15 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 		insets.right = insets.left;
 		configuration.portraitLayoutInsets = insets;
 	}
+}
+
+static void ALEConfigureLayoutForLibraryRoot(id layout) {
+	if (![layout respondsToSelector:@selector(layoutConfiguration)]) {
+		return;
+	}
+
+	SBIconListGridLayoutConfiguration *configuration = [layout layoutConfiguration];
+	ALEConfigureAppLibraryGrid(configuration, YES);
 }
 
 %hook SBIconController
@@ -357,13 +369,16 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 %hook SBHDefaultIconListLayoutProvider
 -(void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	ALEConfigureAppLibraryGrid(configuration);
+	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
 }
 -(id)makeLayoutForIconLocation:(id)iconLocation {
 	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
 	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
 	id layout = %orig;
 	ALEConfiguringLibraryRootLayout = previousRootLayout;
+	if (ALEIsLibraryRootIconLocation(iconLocation)) {
+		ALEConfigureLayoutForLibraryRoot(layout);
+	}
 	return layout;
 }
 -(id)layoutForIconLocation:(id)iconLocation {
@@ -371,6 +386,9 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
 	id layout = %orig;
 	ALEConfiguringLibraryRootLayout = previousRootLayout;
+	if (ALEIsLibraryRootIconLocation(iconLocation)) {
+		ALEConfigureLayoutForLibraryRoot(layout);
+	}
 	return layout;
 }
 %end
