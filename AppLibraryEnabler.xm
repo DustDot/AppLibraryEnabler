@@ -85,9 +85,6 @@ struct SBHIconGridSizeClassSizes {
 
 @interface SBIconListGridLayout : NSObject
 @property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
-- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
-- (unsigned long long)numberOfRowsForOrientation:(long long)orientation;
-- (UIEdgeInsets)layoutInsetsForOrientation:(long long)orientation;
 @end
 
 @interface SBFolder : NSObject
@@ -110,7 +107,6 @@ struct SBHIconGridSizeClassSizes {
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
-static char ALELibraryRootLayoutKey;
 static char ALEExpandedLibraryCategoryFolderKey;
 static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth = 0;
 
@@ -232,18 +228,6 @@ static BOOL ALEIsLandscapeScreen(void) {
 	return interfaceSize.width > interfaceSize.height;
 }
 
-static BOOL ALEOrientationIsLandscape(long long orientation) {
-	UIInterfaceOrientation interfaceOrientation = (UIInterfaceOrientation)orientation;
-	if (UIInterfaceOrientationIsLandscape(interfaceOrientation)) {
-		return YES;
-	}
-	if (UIInterfaceOrientationIsPortrait(interfaceOrientation)) {
-		return NO;
-	}
-
-	return ALEIsLandscapeScreen();
-}
-
 static unsigned long long ALELibraryRootPodColumns(void) {
 	return 4;
 }
@@ -338,23 +322,8 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 		return;
 	}
 
-	objc_setAssociatedObject(layout, &ALELibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 	SBIconListGridLayoutConfiguration *configuration = [layout layoutConfiguration];
 	ALEConfigureAppLibraryGrid(configuration, YES);
-}
-
-static BOOL ALEIsLibraryRootLayout(id layout) {
-	return [objc_getAssociatedObject(layout, &ALELibraryRootLayoutKey) boolValue];
-}
-
-static UIEdgeInsets ALELibraryRootLayoutInsets(UIEdgeInsets insets) {
-	CGSize interfaceSize = ALECurrentInterfaceSize();
-	CGFloat interfaceWidth = interfaceSize.width;
-	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGFloat horizontalInset = MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0);
-	insets.left = horizontalInset;
-	insets.right = horizontalInset;
-	return insets;
 }
 
 static BOOL ALEViewContainsActiveTextField(UIView *view) {
@@ -490,31 +459,6 @@ static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
 		ALEConfigureLayoutForLibraryRoot(layout);
 	}
 	return layout;
-}
-%end
-
-%hook SBIconListGridLayout
--(unsigned long long)numberOfColumnsForOrientation:(long long)orientation {
-	if (ALEIsLibraryRootLayout(self)) {
-		return 8;
-	}
-
-	return %orig;
-}
--(unsigned long long)numberOfRowsForOrientation:(long long)orientation {
-	if (ALEIsLibraryRootLayout(self)) {
-		return ALEOrientationIsLandscape(orientation) ? 8 : 10;
-	}
-
-	return %orig;
-}
--(UIEdgeInsets)layoutInsetsForOrientation:(long long)orientation {
-	UIEdgeInsets insets = %orig;
-	if (ALEIsLibraryRootLayout(self)) {
-		return ALELibraryRootLayoutInsets(insets);
-	}
-
-	return insets;
 }
 %end
 
