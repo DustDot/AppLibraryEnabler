@@ -147,16 +147,6 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
-static CGFloat ALEFullWidthForView(UIView *view) {
-	CGFloat width = 0;
-	width = MAX(width, CGRectGetWidth(view.bounds));
-	width = MAX(width, CGRectGetWidth(view.superview.bounds));
-	width = MAX(width, CGRectGetWidth(view.window.bounds));
-	width = MAX(width, [UIScreen mainScreen].bounds.size.width);
-	width = MAX(width, [UIScreen mainScreen].bounds.size.height);
-	return width;
-}
-
 static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
 	if (firstObject == secondObject) {
 		return YES;
@@ -197,6 +187,20 @@ static CGSize ALECurrentInterfaceSize(void) {
 	}
 
 	return [UIScreen mainScreen].bounds.size;
+}
+
+static CGFloat ALEInterfaceWidthForView(UIView *view) {
+	if (view && CGRectGetWidth(view.window.bounds) > 0) {
+		return CGRectGetWidth(view.window.bounds);
+	}
+	if (view && CGRectGetWidth(view.superview.bounds) > 0) {
+		return CGRectGetWidth(view.superview.bounds);
+	}
+	if (view && CGRectGetWidth(view.bounds) > 0) {
+		return CGRectGetWidth(view.bounds);
+	}
+
+	return ALECurrentInterfaceSize().width;
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
@@ -325,7 +329,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 %hook SBHomeScreenOverlayViewController
 -(CGFloat)contentWidth {
 	if (ALEOverlayShowsAppLibrary(self)) {
-		return ALEFullWidthForView(self.view);
+		return ALEInterfaceWidthForView(self.view);
 	}
 
 	return %orig;
@@ -342,7 +346,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	if (ALEOverlayShowsAppLibrary(self)) {
 		NSLayoutConstraint *contentWidthConstraint = ALEValueForKey(self, @"contentWidthConstraint");
 		if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
-			contentWidthConstraint.constant = ALEFullWidthForView(self.view);
+			contentWidthConstraint.constant = ALEInterfaceWidthForView(self.view);
 		}
 	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
