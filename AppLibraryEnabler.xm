@@ -30,6 +30,10 @@
 @property (assign,nonatomic) UIEdgeInsets searchTextFieldHorizontalEdgeInsets;
 @end
 
+@interface SBHSearchBar (AppLibraryEnablerFrame)
+- (BOOL)isFirstResponder;
+@end
+
 @protocol SBHOccludable
 @end
 
@@ -239,10 +243,14 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize orig
 }
 
 static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
-	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.58 : 0.56);
-	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 760.0 : 560.0;
-	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 980.0 : 700.0;
+	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.66 : 0.64);
+	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 600.0;
+	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 760.0;
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
+}
+
+static CGFloat ALELibrarySearchWidth(CGFloat interfaceWidth) {
+	return ALELibraryRootContentWidth(interfaceWidth) * 0.48;
 }
 
 static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconGridSize originalGridSize) {
@@ -278,7 +286,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
 	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGSize spacingSize = CGSizeMake(interfaceWidth, interfaceHeight);
+	CGSize spacingSize = CGSizeMake(rootLayout ? rootContentWidth : interfaceWidth, interfaceHeight);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = rootLayout ? 8 : 4;
@@ -316,6 +324,59 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 
 	SBIconListGridLayoutConfiguration *configuration = [layout layoutConfiguration];
 	ALEConfigureAppLibraryGrid(configuration, YES);
+}
+
+static BOOL ALEViewContainsActiveTextField(UIView *view) {
+	if (![view isKindOfClass:[UIView class]]) {
+		return NO;
+	}
+
+	if ([view isKindOfClass:[UITextField class]]) {
+		UITextField *textField = (UITextField *)view;
+		if (textField.isEditing || textField.isFirstResponder) {
+			return YES;
+		}
+	}
+
+	for (UIView *subview in view.subviews) {
+		if (ALEViewContainsActiveTextField(subview)) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
+static BOOL ALESearchBarShouldUseNativeFrame(SBHSearchBar *searchBar) {
+	if (![searchBar isKindOfClass:[UIView class]] || !searchBar.superview) {
+		return YES;
+	}
+
+	if ([searchBar isFirstResponder] || ALEViewContainsActiveTextField(searchBar)) {
+		return YES;
+	}
+
+	return NO;
+}
+
+static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
+	if (ALESearchBarShouldUseNativeFrame(searchBar)) {
+		return frame;
+	}
+
+	CGFloat interfaceWidth = CGRectGetWidth(searchBar.superview.bounds);
+	if (interfaceWidth <= 0) {
+		interfaceWidth = ALECurrentInterfaceSize().width;
+	}
+
+	CGFloat targetWidth = ALELibrarySearchWidth(interfaceWidth);
+	if (targetWidth <= 0 || targetWidth >= interfaceWidth) {
+		return frame;
+	}
+
+	frame.origin.x = (interfaceWidth - targetWidth) / 2.0;
+	frame.size.width = targetWidth;
+	return frame;
 }
 
 %hook SBIconController
@@ -489,6 +550,9 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	searchTextFieldHorizontalEdgeInsets.right = 23;
 
 	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		searchBar.frame = ALELibrarySearchBarFrame(searchBar, searchBar.frame);
+	}
 }
 - (void)_layoutSearchViews {
 	%orig;
@@ -505,6 +569,17 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	);
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
+
+	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		searchBar.frame = ALELibrarySearchBarFrame(searchBar, searchBar.frame);
+	}
+}
+%end
+
+%hook SBHSearchBar
+- (void)setFrame:(CGRect)frame {
+	%orig(ALELibrarySearchBarFrame(self, frame));
 }
 %end
 
