@@ -182,14 +182,17 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 }
 
 static CGSize ALECurrentInterfaceSize(void) {
-	UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
 	if (keyWindow && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
 		return keyWindow.bounds.size;
 	}
 
-	for (UIWindow *window in [UIApplication sharedApplication].windows) {
-		if (window && !CGSizeEqualToSize(window.bounds.size, CGSizeZero)) {
-			return window.bounds.size;
+	NSArray *windows = ALEValueForKey([UIApplication sharedApplication], @"windows");
+	if ([windows isKindOfClass:[NSArray class]]) {
+		for (UIWindow *window in windows) {
+			if ([window isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(window.bounds.size, CGSizeZero)) {
+				return window.bounds.size;
+			}
 		}
 	}
 
