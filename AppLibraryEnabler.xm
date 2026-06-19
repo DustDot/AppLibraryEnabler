@@ -225,7 +225,7 @@ static BOOL ALEIsLandscapeScreen(void) {
 }
 
 static unsigned long long ALELibraryRootPodColumns(void) {
-	return ALEIsLandscapeScreen() ? 4 : 3;
+	return 4;
 }
 
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize) {
@@ -236,6 +236,13 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize orig
 	gridSize.columns = MAX(gridSize.columns, (unsigned short)(podColumns * 2));
 	gridSize.rows = MAX(gridSize.rows, (unsigned short)(podRows * 2));
 	return gridSize;
+}
+
+static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
+	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.58 : 0.56);
+	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 760.0 : 560.0;
+	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 980.0 : 700.0;
+	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
 static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconGridSize originalGridSize) {
@@ -268,9 +275,10 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	}
 
 	CGSize screenSize = ALECurrentInterfaceSize();
-	CGFloat landscapeWidth = MAX(screenSize.width, screenSize.height);
-	CGFloat portraitWidth = MIN(screenSize.width, screenSize.height);
-	CGSize spacingSize = ALEIsLandscapeScreen() ? CGSizeMake(landscapeWidth, portraitWidth) : CGSizeMake(portraitWidth, landscapeWidth);
+	CGFloat interfaceWidth = screenSize.width;
+	CGFloat interfaceHeight = screenSize.height;
+	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
+	CGSize spacingSize = CGSizeMake(interfaceWidth, interfaceHeight);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = rootLayout ? 8 : 4;
@@ -279,7 +287,7 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 		configuration.numberOfLandscapeRows = rootLayout ? 8 : 4;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = rootLayout ? 6 : 3;
+		configuration.numberOfPortraitColumns = rootLayout ? 8 : 3;
 	}
 	if ([configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
 		configuration.numberOfPortraitRows = rootLayout ? 10 : 5;
@@ -289,13 +297,13 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	}
 	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
-		insets.left = rootLayout ? MAX((CGFloat)72.0, landscapeWidth * 0.075) : MAX((CGFloat)96.0, landscapeWidth * 0.11);
+		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)96.0, interfaceWidth * 0.11);
 		insets.right = insets.left;
 		configuration.landscapeLayoutInsets = insets;
 	}
 	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.portraitLayoutInsets;
-		insets.left = rootLayout ? MAX((CGFloat)48.0, portraitWidth * 0.08) : MAX((CGFloat)72.0, portraitWidth * 0.105);
+		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)72.0, interfaceWidth * 0.105);
 		insets.right = insets.left;
 		configuration.portraitLayoutInsets = insets;
 	}
