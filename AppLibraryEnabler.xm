@@ -48,7 +48,6 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
-+ (id)iconLocation;
 @end
 
 struct SBHIconGridSize {
@@ -63,21 +62,6 @@ struct SBHIconGridSizeClassSizes {
 	struct SBHIconGridSize newsLargeTall;
 	struct SBHIconGridSize extraLarge;
 };
-
-@interface SBIconListGridLayoutConfiguration : NSObject
-@property (nonatomic) unsigned long long numberOfLandscapeColumns;
-@property (nonatomic) unsigned long long numberOfLandscapeRows;
-@property (nonatomic) unsigned long long numberOfPortraitColumns;
-@property (nonatomic) unsigned long long numberOfPortraitRows;
-@property (nonatomic) CGSize listSizeForIconSpacingCalculation;
-@property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
-@property (nonatomic) UIEdgeInsets portraitLayoutInsets;
-@property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
-@end
-
-@interface SBIconListGridLayout : NSObject
-@property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
-@end
 
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) id folder;
@@ -144,24 +128,6 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
 	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
-}
-
-static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
-	if (firstObject == secondObject) {
-		return YES;
-	}
-	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
-		return NO;
-	}
-	return [firstObject isEqual:secondObject];
-}
-
-static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
-	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
-	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
-		return NO;
-	}
-	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
 }
 
 static BOOL ALEIsLibraryCategoriesRootFolder(id folder) {
@@ -236,45 +202,6 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize grid
 	return gridSize;
 }
 
-static void ALEConfigureLibraryRootLayout(SBIconListGridLayoutConfiguration *configuration) {
-	if (!configuration) {
-		return;
-	}
-
-	CGSize interfaceSize = ALEInterfaceSize();
-	CGFloat contentWidth = ALELibraryContentWidth();
-	CGFloat horizontalInset = floor((interfaceSize.width - contentWidth) / 2.0);
-	UIEdgeInsets landscapeInsets = configuration.landscapeLayoutInsets;
-	UIEdgeInsets portraitInsets = configuration.portraitLayoutInsets;
-	struct SBHIconGridSizeClassSizes classSizes = configuration.iconGridSizeClassSizes;
-
-	landscapeInsets.left = horizontalInset;
-	landscapeInsets.right = horizontalInset;
-	portraitInsets.left = horizontalInset;
-	portraitInsets.right = horizontalInset;
-
-	classSizes.small = ALEMakeGridSize(2, 2);
-	classSizes.medium = ALEMakeGridSize(2, 2);
-	classSizes.large = ALEMakeGridSize(2, 2);
-	classSizes.newsLargeTall = ALEMakeGridSize(2, 2);
-	classSizes.extraLarge = ALEMakeGridSize(2, 2);
-
-	configuration.numberOfLandscapeColumns = 8;
-	configuration.numberOfLandscapeRows = 6;
-	configuration.numberOfPortraitColumns = 8;
-	configuration.numberOfPortraitRows = 6;
-	configuration.listSizeForIconSpacingCalculation = CGSizeMake(contentWidth, interfaceSize.height);
-	configuration.landscapeLayoutInsets = landscapeInsets;
-	configuration.portraitLayoutInsets = portraitInsets;
-	configuration.iconGridSizeClassSizes = classSizes;
-}
-
-static void ALEConfigureLibraryRootLayoutIfPossible(id layout) {
-	if ([layout respondsToSelector:@selector(layoutConfiguration)]) {
-		ALEConfigureLibraryRootLayout([(SBIconListGridLayout *)layout layoutConfiguration]);
-	}
-}
-
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -326,31 +253,6 @@ static void ALEConfigureLibraryRootLayoutIfPossible(id layout) {
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
 }
-%end
-
-%group ALEiPadOS15LayoutProvider
-%hook SBHDefaultIconListLayoutProvider
-- (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
-	%orig;
-	ALEConfigureLibraryRootLayout(configuration);
-}
-
-- (id)makeLayoutForIconLocation:(id)iconLocation {
-	id layout = %orig;
-	if (ALEIsLibraryRootIconLocation(iconLocation)) {
-		ALEConfigureLibraryRootLayoutIfPossible(layout);
-	}
-	return layout;
-}
-
-- (id)layoutForIconLocation:(id)iconLocation {
-	id layout = %orig;
-	if (ALEIsLibraryRootIconLocation(iconLocation)) {
-		ALEConfigureLibraryRootLayoutIfPossible(layout);
-	}
-	return layout;
-}
-%end
 %end
 
 %hook SBIconListModel
@@ -478,12 +380,4 @@ extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature
 
 %ctor {
 	%init;
-
-	Class layoutProviderClass = NSClassFromString(@"SBHDefaultIconListLayoutProvider");
-	if (layoutProviderClass &&
-		class_getInstanceMethod(layoutProviderClass, @selector(configureAppLibraryConfiguration:forScreenType:layoutOptions:)) &&
-		class_getInstanceMethod(layoutProviderClass, @selector(makeLayoutForIconLocation:)) &&
-		class_getInstanceMethod(layoutProviderClass, @selector(layoutForIconLocation:))) {
-		%init(ALEiPadOS15LayoutProvider);
-	}
 }
