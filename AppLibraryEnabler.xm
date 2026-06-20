@@ -82,7 +82,6 @@ struct SBHIconGridSizeClassSizes {
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) id folder;
 - (struct SBHIconGridSize)gridSize;
-- (struct SBHIconGridSize)gridSizeWithOptions:(unsigned long long)options;
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
 
@@ -356,14 +355,6 @@ static void ALEConfigureLibraryRootLayoutIfPossible(id layout) {
 
 %hook SBIconListModel
 - (struct SBHIconGridSize)gridSize {
-	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALELibraryRootGridSize(gridSize);
-	}
-	return gridSize;
-}
-
-- (struct SBHIconGridSize)gridSizeWithOptions:(unsigned long long)options {
 	struct SBHIconGridSize gridSize = %orig;
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		return ALELibraryRootGridSize(gridSize);
