@@ -66,6 +66,7 @@ struct SBHIconGridSizeClassSizes {
 @interface SBIconListModel : NSObject
 @property (nonatomic, readonly) id folder;
 - (struct SBHIconGridSize)gridSize;
+- (struct SBHIconGridSizeClassSizes)iconGridSizeClassSizes;
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
 
@@ -190,9 +191,26 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 }
 
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize gridSize) {
-	gridSize.columns = 4;
-	gridSize.rows = MAX(gridSize.rows, (unsigned short)3);
+	gridSize.columns = 8;
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)6);
 	return gridSize;
+}
+
+static struct SBHIconGridSize ALELibraryPodGridSize(void) {
+	struct SBHIconGridSize gridSize;
+	gridSize.columns = 2;
+	gridSize.rows = 2;
+	return gridSize;
+}
+
+static struct SBHIconGridSizeClassSizes ALELibraryRootGridSizeClassSizes(struct SBHIconGridSizeClassSizes classSizes) {
+	struct SBHIconGridSize podGridSize = ALELibraryPodGridSize();
+	classSizes.small = podGridSize;
+	classSizes.medium = podGridSize;
+	classSizes.large = podGridSize;
+	classSizes.newsLargeTall = podGridSize;
+	classSizes.extraLarge = podGridSize;
+	return classSizes;
 }
 
 %hook SBIconController
@@ -262,6 +280,14 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize grid
 		return %orig(ALELibraryRootGridSize(gridSize), options);
 	}
 	return %orig;
+}
+
+- (struct SBHIconGridSizeClassSizes)iconGridSizeClassSizes {
+	struct SBHIconGridSizeClassSizes classSizes = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryRootGridSizeClassSizes(classSizes);
+	}
+	return classSizes;
 }
 %end
 
