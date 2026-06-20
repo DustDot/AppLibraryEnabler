@@ -79,6 +79,13 @@ struct SBHIconGridSizeClassSizes {
 @property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
 @end
 
+@interface SBIconListModel : NSObject
+@property (nonatomic, readonly) id folder;
+- (struct SBHIconGridSize)gridSize;
+- (struct SBHIconGridSize)gridSizeWithOptions:(unsigned long long)options;
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
+@end
+
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -158,6 +165,10 @@ static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
 	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
 }
 
+static BOOL ALEIsLibraryCategoriesRootFolder(id folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
 static CGSize ALEInterfaceSize(void) {
 	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
 	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
@@ -217,6 +228,12 @@ static struct SBHIconGridSize ALEMakeGridSize(unsigned short columns, unsigned s
 	struct SBHIconGridSize gridSize;
 	gridSize.columns = columns;
 	gridSize.rows = rows;
+	return gridSize;
+}
+
+static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize gridSize) {
+	gridSize.columns = 4;
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)3);
 	return gridSize;
 }
 
@@ -312,6 +329,7 @@ static void ALEConfigureLibraryRootLayoutIfPossible(id layout) {
 }
 %end
 
+%group ALEiPadOS15LayoutProvider
 %hook SBHDefaultIconListLayoutProvider
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
@@ -332,6 +350,32 @@ static void ALEConfigureLibraryRootLayoutIfPossible(id layout) {
 		ALEConfigureLibraryRootLayoutIfPossible(layout);
 	}
 	return layout;
+}
+%end
+%end
+
+%hook SBIconListModel
+- (struct SBHIconGridSize)gridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryRootGridSize(gridSize);
+	}
+	return gridSize;
+}
+
+- (struct SBHIconGridSize)gridSizeWithOptions:(unsigned long long)options {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryRootGridSize(gridSize);
+	}
+	return gridSize;
+}
+
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return %orig(ALELibraryRootGridSize(gridSize), options);
+	}
+	return %orig;
 }
 %end
 
@@ -443,4 +487,12 @@ extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature
 
 %ctor {
 	%init;
+
+	Class layoutProviderClass = NSClassFromString(@"SBHDefaultIconListLayoutProvider");
+	if (layoutProviderClass &&
+		class_getInstanceMethod(layoutProviderClass, @selector(configureAppLibraryConfiguration:forScreenType:layoutOptions:)) &&
+		class_getInstanceMethod(layoutProviderClass, @selector(makeLayoutForIconLocation:)) &&
+		class_getInstanceMethod(layoutProviderClass, @selector(layoutForIconLocation:))) {
+		%init(ALEiPadOS15LayoutProvider);
+	}
 }
