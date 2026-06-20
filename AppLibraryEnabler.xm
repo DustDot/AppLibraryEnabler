@@ -14,7 +14,6 @@
  * along with App Library Enabler. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <string.h>
@@ -30,16 +29,11 @@
 @property (assign,nonatomic) UIEdgeInsets searchTextFieldHorizontalEdgeInsets;
 @end
 
-@interface SBHSearchBar (AppLibraryEnablerFrame)
-- (BOOL)isFirstResponder;
-@end
-
 @protocol SBHOccludable
 @end
 
 @interface SBHomeScreenOverlayViewController : UIViewController
 @property (nonatomic, retain) UIViewController<SBHOccludable> *rightSidebarViewController;
-@property (nonatomic, retain) NSLayoutConstraint *contentWidthConstraint;
 @end
 
 @interface MTMaterialView : UIView
@@ -55,329 +49,6 @@
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
 @end
-
-@interface SBHLibraryPodFolderController (AppLibraryEnabler)
-+ (id)iconLocation;
-@end
-
-struct SBHIconGridSize {
-	unsigned short columns;
-	unsigned short rows;
-};
-
-struct SBHIconGridSizeClassSizes {
-	struct SBHIconGridSize small;
-	struct SBHIconGridSize medium;
-	struct SBHIconGridSize large;
-	struct SBHIconGridSize extraLarge;
-};
-
-@interface SBIconListGridLayoutConfiguration : NSObject
-@property (nonatomic) unsigned long long numberOfLandscapeColumns;
-@property (nonatomic) unsigned long long numberOfLandscapeRows;
-@property (nonatomic) unsigned long long numberOfPortraitColumns;
-@property (nonatomic) unsigned long long numberOfPortraitRows;
-@property (nonatomic) CGSize listSizeForIconSpacingCalculation;
-@property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
-@property (nonatomic) UIEdgeInsets portraitLayoutInsets;
-@property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
-@end
-
-@interface SBIconListGridLayout : NSObject
-@property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
-@end
-
-@interface SBFolder : NSObject
-- (struct SBHIconGridSize)listGridSize;
-@end
-
-@interface SBHLibraryCategoryFolder : SBFolder
-- (id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier;
-@end
-
-@interface SBHLibraryCategory : NSObject
-- (SBHLibraryCategoryFolder *)expandedPodFolder;
-@end
-
-@interface SBIconListModel : NSObject
-@property (nonatomic, readonly) SBFolder *folder;
-@property (nonatomic, readonly) unsigned long long numberOfIcons;
-- (struct SBHIconGridSize)gridSize;
-- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
-@end
-
-static BOOL ALEConfiguringLibraryRootLayout = NO;
-static char ALEExpandedLibraryCategoryFolderKey;
-static NSUInteger ALEBuildingExpandedLibraryCategoryFolderDepth = 0;
-
-static id ALEValueForKey(id object, NSString *key) {
-	if (!object || !key) {
-		return nil;
-	}
-
-	@try {
-		return [object valueForKey:key];
-	} @catch (NSException *exception) {
-		return nil;
-	}
-}
-
-static BOOL ALEObjectIsKindOfClassNamed(id object, NSString *className) {
-	if (!object || !className) {
-		return NO;
-	}
-
-	Class cls = NSClassFromString(className);
-	return cls ? [object isKindOfClass:cls] : [NSStringFromClass([object class]) isEqualToString:className];
-}
-
-static BOOL ALEIsLibraryController(id controller) {
-	if (!controller) {
-		return NO;
-	}
-
-	if (ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryViewController")) {
-		return YES;
-	}
-
-	id avocadoViewController = ALEValueForKey(controller, @"avocadoViewController");
-	if (avocadoViewController && avocadoViewController != controller) {
-		return ALEIsLibraryController(avocadoViewController);
-	}
-
-	return NO;
-}
-
-static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
-	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
-	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
-
-	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
-}
-
-static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
-	if (firstObject == secondObject) {
-		return YES;
-	}
-	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
-		return NO;
-	}
-
-	return [firstObject isEqual:secondObject];
-}
-
-static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
-	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
-	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
-		return NO;
-	}
-
-	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
-}
-
-static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
-	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
-}
-
-static CGSize ALECurrentInterfaceSize(void) {
-	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
-	if (keyWindow && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
-		return keyWindow.bounds.size;
-	}
-
-	NSArray *windows = ALEValueForKey([UIApplication sharedApplication], @"windows");
-	if ([windows isKindOfClass:[NSArray class]]) {
-		for (UIWindow *window in windows) {
-			if ([window isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(window.bounds.size, CGSizeZero)) {
-				return window.bounds.size;
-			}
-		}
-	}
-
-	return [UIScreen mainScreen].bounds.size;
-}
-
-static CGFloat ALEInterfaceWidthForView(UIView *view) {
-	if (view && CGRectGetWidth(view.window.bounds) > 0) {
-		return CGRectGetWidth(view.window.bounds);
-	}
-	if (view && CGRectGetWidth(view.superview.bounds) > 0) {
-		return CGRectGetWidth(view.superview.bounds);
-	}
-	if (view && CGRectGetWidth(view.bounds) > 0) {
-		return CGRectGetWidth(view.bounds);
-	}
-
-	return ALECurrentInterfaceSize().width;
-}
-
-static BOOL ALEIsLandscapeScreen(void) {
-	CGSize interfaceSize = ALECurrentInterfaceSize();
-	if (interfaceSize.width != interfaceSize.height) {
-		return interfaceSize.width > interfaceSize.height;
-	}
-
-	NSNumber *orientationValue = ALEValueForKey([UIApplication sharedApplication], @"statusBarOrientation");
-	if ([orientationValue isKindOfClass:[NSNumber class]]) {
-		UIInterfaceOrientation orientation = (UIInterfaceOrientation)[orientationValue integerValue];
-		if (orientation != UIInterfaceOrientationUnknown) {
-			return UIInterfaceOrientationIsLandscape(orientation);
-		}
-	}
-
-	return interfaceSize.width > interfaceSize.height;
-}
-
-static unsigned long long ALELibraryRootPodColumns(void) {
-	return 4;
-}
-
-static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize) {
-	struct SBHIconGridSize gridSize = originalGridSize;
-	unsigned long long podColumns = ALELibraryRootPodColumns();
-	unsigned long long podRows = ALEIsLandscapeScreen() ? 4 : 5;
-
-	gridSize.columns = MAX(gridSize.columns, (unsigned short)(podColumns * 2));
-	gridSize.rows = MAX(gridSize.rows, (unsigned short)(podRows * 2));
-	return gridSize;
-}
-
-static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
-	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.66 : 0.64);
-	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 600.0;
-	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 760.0;
-	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
-}
-
-static CGFloat ALELibrarySearchWidth(CGFloat interfaceWidth) {
-	return ALELibraryRootContentWidth(interfaceWidth) * 0.48;
-}
-
-static struct SBHIconGridSize ALEExpandedLibraryCategoryGridSize(struct SBHIconGridSize originalGridSize) {
-	struct SBHIconGridSize gridSize = originalGridSize;
-
-	if (ALEIsLandscapeScreen()) {
-		gridSize.columns = MAX(gridSize.columns, (unsigned short)6);
-		gridSize.rows = MAX(gridSize.rows, (unsigned short)4);
-	} else {
-		gridSize.columns = MAX(gridSize.columns, (unsigned short)4);
-		gridSize.rows = MAX(gridSize.rows, (unsigned short)5);
-	}
-
-	return gridSize;
-}
-
-static BOOL ALEIsExpandedLibraryCategoryFolder(SBFolder *folder) {
-	return [objc_getAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey) boolValue];
-}
-
-static void ALEMarkExpandedLibraryCategoryFolder(SBFolder *folder) {
-	if (folder) {
-		objc_setAssociatedObject(folder, &ALEExpandedLibraryCategoryFolderKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-	}
-}
-
-static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL rootLayout) {
-	if (!configuration) {
-		return;
-	}
-
-	CGSize screenSize = ALECurrentInterfaceSize();
-	CGFloat interfaceWidth = screenSize.width;
-	CGFloat interfaceHeight = screenSize.height;
-	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGSize spacingSize = CGSizeMake(rootLayout ? rootContentWidth : interfaceWidth, interfaceHeight);
-
-	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
-		configuration.numberOfLandscapeColumns = rootLayout ? 8 : 4;
-	}
-	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeRows:)]) {
-		configuration.numberOfLandscapeRows = rootLayout ? 8 : 4;
-	}
-	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
-		configuration.numberOfPortraitColumns = rootLayout ? 8 : 3;
-	}
-	if ([configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
-		configuration.numberOfPortraitRows = rootLayout ? 10 : 5;
-	}
-	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
-		configuration.listSizeForIconSpacingCalculation = spacingSize;
-	}
-	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
-		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
-		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)96.0, interfaceWidth * 0.11);
-		insets.right = insets.left;
-		configuration.landscapeLayoutInsets = insets;
-	}
-	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
-		UIEdgeInsets insets = configuration.portraitLayoutInsets;
-		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)72.0, interfaceWidth * 0.105);
-		insets.right = insets.left;
-		configuration.portraitLayoutInsets = insets;
-	}
-}
-
-static void ALEConfigureLayoutForLibraryRoot(id layout) {
-	if (![layout respondsToSelector:@selector(layoutConfiguration)]) {
-		return;
-	}
-
-	SBIconListGridLayoutConfiguration *configuration = [layout layoutConfiguration];
-	ALEConfigureAppLibraryGrid(configuration, YES);
-}
-
-static BOOL ALEViewContainsActiveTextField(UIView *view) {
-	if (![view isKindOfClass:[UIView class]]) {
-		return NO;
-	}
-
-	if ([view isKindOfClass:[UITextField class]]) {
-		UITextField *textField = (UITextField *)view;
-		if (textField.isEditing || textField.isFirstResponder) {
-			return YES;
-		}
-	}
-
-	for (UIView *subview in view.subviews) {
-		if (ALEViewContainsActiveTextField(subview)) {
-			return YES;
-		}
-	}
-
-	return NO;
-}
-
-static BOOL ALESearchBarShouldUseNativeFrame(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:[UIView class]] || !searchBar.superview) {
-		return YES;
-	}
-
-	if ([searchBar isFirstResponder] || ALEViewContainsActiveTextField(searchBar)) {
-		return YES;
-	}
-
-	return NO;
-}
-
-static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
-	if (ALESearchBarShouldUseNativeFrame(searchBar)) {
-		return frame;
-	}
-
-	CGFloat interfaceWidth = CGRectGetWidth(searchBar.superview.bounds);
-	if (interfaceWidth <= 0) {
-		interfaceWidth = ALECurrentInterfaceSize().width;
-	}
-
-	CGFloat targetWidth = ALELibrarySearchWidth(interfaceWidth);
-	if (targetWidth <= 0 || targetWidth >= interfaceWidth) {
-		return frame;
-	}
-
-	frame.origin.x = (interfaceWidth - targetWidth) / 2.0;
-	frame.size.width = targetWidth;
-	return frame;
-}
 
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
@@ -408,126 +79,10 @@ static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
 %end
 
 %hook SBHomeScreenOverlayViewController
--(CGFloat)contentWidth {
-	if (ALEOverlayShowsAppLibrary(self)) {
-		return ALEInterfaceWidthForView(self.view);
-	}
-
-	return %orig;
-}
--(CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
-	if (ALEOverlayShowsAppLibrary(self)) {
-		return containerWidth;
-	}
-
-	return %orig;
-}
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
-	if (ALEOverlayShowsAppLibrary(self)) {
-		NSLayoutConstraint *contentWidthConstraint = ALEValueForKey(self, @"contentWidthConstraint");
-		if ([contentWidthConstraint isKindOfClass:[NSLayoutConstraint class]]) {
-			contentWidthConstraint.constant = ALEInterfaceWidthForView(self.view);
-		}
-	}
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
-}
-%end
-
-%hook SBHDefaultIconListLayoutProvider
--(void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
-	%orig;
-	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
-}
--(id)makeLayoutForIconLocation:(id)iconLocation {
-	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
-	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
-	id layout = %orig;
-	ALEConfiguringLibraryRootLayout = previousRootLayout;
-	if (ALEIsLibraryRootIconLocation(iconLocation)) {
-		ALEConfigureLayoutForLibraryRoot(layout);
-	}
-	return layout;
-}
--(id)layoutForIconLocation:(id)iconLocation {
-	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
-	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
-	id layout = %orig;
-	ALEConfiguringLibraryRootLayout = previousRootLayout;
-	if (ALEIsLibraryRootIconLocation(iconLocation)) {
-		ALEConfigureLayoutForLibraryRoot(layout);
-	}
-	return layout;
-}
-%end
-
-%hook SBHLibraryCategory
--(SBHLibraryCategoryFolder *)expandedPodFolder {
-	ALEBuildingExpandedLibraryCategoryFolderDepth++;
-	SBHLibraryCategoryFolder *folder = nil;
-	@try {
-		folder = %orig;
-	} @finally {
-		ALEBuildingExpandedLibraryCategoryFolderDepth--;
-	}
-	ALEMarkExpandedLibraryCategoryFolder(folder);
-	return folder;
-}
-%end
-
-%hook SBHLibraryCategoryFolder
--(id)initWithDisplayName:(id)displayName maxListCount:(unsigned long long)maxListCount listGridSize:(struct SBHIconGridSize)listGridSize libraryCategoryIdentifier:(id)libraryCategoryIdentifier {
-	BOOL buildingExpandedFolder = ALEBuildingExpandedLibraryCategoryFolderDepth > 0;
-	if (buildingExpandedFolder) {
-		listGridSize = ALEExpandedLibraryCategoryGridSize(listGridSize);
-	}
-
-	id folder = %orig(displayName, maxListCount, listGridSize, libraryCategoryIdentifier);
-	if (buildingExpandedFolder) {
-		ALEMarkExpandedLibraryCategoryFolder(folder);
-	}
-	return folder;
-}
-%end
-
-%hook SBFolder
--(struct SBHIconGridSize)listGridSize {
-	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self)) {
-		return ALELibraryRootGridSize(gridSize);
-	}
-	if (ALEIsExpandedLibraryCategoryFolder(self)) {
-		return ALEExpandedLibraryCategoryGridSize(gridSize);
-	}
-
-	return gridSize;
-}
-%end
-
-%hook SBIconListModel
--(struct SBHIconGridSize)gridSize {
-	struct SBHIconGridSize gridSize = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALELibraryRootGridSize(gridSize);
-	}
-	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
-		return ALEExpandedLibraryCategoryGridSize(gridSize);
-	}
-
-	return gridSize;
-}
--(id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		struct SBHIconGridSize rootGridSize = ALELibraryRootGridSize(gridSize);
-		return %orig(rootGridSize, options);
-	}
-	if (ALEIsExpandedLibraryCategoryFolder(self.folder)) {
-		struct SBHIconGridSize expandedGridSize = ALEExpandedLibraryCategoryGridSize(gridSize);
-		return %orig(expandedGridSize, options);
-	}
-
-	return %orig;
 }
 %end
 
@@ -550,9 +105,6 @@ static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
 	searchTextFieldHorizontalEdgeInsets.right = 23;
 
 	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
-	if ([searchBar isKindOfClass:[UIView class]]) {
-		searchBar.frame = ALELibrarySearchBarFrame(searchBar, searchBar.frame);
-	}
 }
 - (void)_layoutSearchViews {
 	%orig;
@@ -569,17 +121,6 @@ static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
 	);
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
-
-	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
-	if ([searchBar isKindOfClass:[UIView class]]) {
-		searchBar.frame = ALELibrarySearchBarFrame(searchBar, searchBar.frame);
-	}
-}
-%end
-
-%hook SBHSearchBar
-- (void)setFrame:(CGRect)frame {
-	%orig(ALELibrarySearchBarFrame(self, frame));
 }
 %end
 
@@ -592,11 +133,42 @@ static CGRect ALELibrarySearchBarFrame(SBHSearchBar *searchBar, CGRect frame) {
 }
 %end
 
+%hook _SBHLibraryPodIconListView
+- (CGRect)frame {
+	CGRect origValue = %orig;
+	CGRect newContainerFrame = origValue;
+	newContainerFrame.size.width = 393;
+	return newContainerFrame;
+}
+- (CGRect)iconLayoutRect {
+	CGRect origValue = %orig;
+	CGRect newFrame = origValue;
+	newFrame.size.width = 393;
+	return newFrame;
+}
+
+- (CGSize)iconSpacing {
+	CGSize origValue = %orig;
+	CGSize newSize = origValue;
+	newSize.width = 33;
+	newSize.height = 37;
+	return newSize;
+}
+- (CGSize)effectiveIconSpacing {
+	CGSize origValue = %orig;
+	CGSize newSize = origValue;
+	newSize.width = 33;
+	newSize.height = 37;
+	return newSize;
+}
+%end
+
 extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature);
 %hookf(bool, _os_feature_enabled_impl, const char *domain, const char *feature) {
-    if (strcmp(domain, "SpringBoard") == 0 && strcmp(feature, "Dewey") == 0)
-        return true;
-    return %orig;
+	if (strcmp(domain, "SpringBoard") == 0 && strcmp(feature, "Dewey") == 0) {
+		return true;
+	}
+	return %orig;
 }
 
 %ctor {
