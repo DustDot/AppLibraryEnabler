@@ -189,13 +189,6 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 	return frame;
 }
 
-static struct SBHIconGridSize ALEMakeGridSize(unsigned short columns, unsigned short rows) {
-	struct SBHIconGridSize gridSize;
-	gridSize.columns = columns;
-	gridSize.rows = rows;
-	return gridSize;
-}
-
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize gridSize) {
 	gridSize.columns = 4;
 	gridSize.rows = MAX(gridSize.rows, (unsigned short)3);
