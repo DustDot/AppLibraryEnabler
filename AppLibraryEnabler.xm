@@ -18,9 +18,6 @@
 #import <objc/runtime.h>
 #import <string.h>
 
-static NSString * const kALEDisablePath = @"/var/mobile/Library/Preferences/com.tomaszpoliszuk.applibraryenabler.disable";
-static NSString * const kALELogPath = @"/var/mobile/Library/Preferences/com.tomaszpoliszuk.applibraryenabler.log";
-
 @interface UIView (AppLibraryEnabler)
 - (id)_viewControllerForAncestor;
 @end
@@ -169,19 +166,6 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 	return frame;
 }
 
-static void ALELog(NSString *format, ...) {
-	if (![[NSFileManager defaultManager] fileExistsAtPath:kALELogPath]) {
-		return;
-	}
-
-	va_list args;
-	va_start(args, format);
-	NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-	va_end(args);
-
-	NSLog(@"[AppLibraryEnabler] %@", message);
-}
-
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -215,7 +199,6 @@ static void ALELog(NSString *format, ...) {
 	if (ALEOverlayShowsAppLibrary(self)) {
 		CGFloat width = ALEInterfaceSize().width;
 		if (width > 0) {
-			ALELog(@"overlay contentWidth -> %.2f", width);
 			return width;
 		}
 	}
@@ -224,7 +207,6 @@ static void ALELog(NSString *format, ...) {
 
 -(CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
 	if (ALEOverlayShowsAppLibrary(self) && containerWidth > 0) {
-		ALELog(@"overlay contentWidthWithContainerWidth %.2f", containerWidth);
 		return containerWidth;
 	}
 	return %orig;
@@ -252,7 +234,6 @@ static void ALELog(NSString *format, ...) {
 
 	if ([searchBar isKindOfClass:[UIView class]]) {
 		[searchBar setFrame:ALELibrarySearchBarFrame(searchBar, searchBar.frame)];
-		ALELog(@"search layout bounds=%@ search=%@", NSStringFromCGRect(selfFrame), NSStringFromCGRect(searchBar.frame));
 	}
 }
 
@@ -278,7 +259,6 @@ static void ALELog(NSString *format, ...) {
 
 	if ([searchBar isKindOfClass:[UIView class]]) {
 		[searchBar setFrame:ALELibrarySearchBarFrame(searchBar, searchBar.frame)];
-		ALELog(@"search appeared bounds=%@ search=%@", NSStringFromCGRect(selfFrame), NSStringFromCGRect(searchBar.frame));
 	}
 }
 - (void)_layoutSearchViews {
@@ -296,7 +276,6 @@ static void ALELog(NSString *format, ...) {
 	);
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
-	ALELog(@"search backdrop=%@", NSStringFromCGRect(fullScreenFrame));
 
 	SBHSearchBar *searchBar = ALEValueForKey(self, @"_searchBar");
 	if ([searchBar isKindOfClass:[UIView class]]) {
@@ -319,14 +298,12 @@ static void ALELog(NSString *format, ...) {
 	CGRect origValue = %orig;
 	CGRect newContainerFrame = origValue;
 	newContainerFrame.size.width = ALELibraryPodWidth();
-	ALELog(@"pod frame %@ -> %@", NSStringFromCGRect(origValue), NSStringFromCGRect(newContainerFrame));
 	return newContainerFrame;
 }
 - (CGRect)iconLayoutRect {
 	CGRect origValue = %orig;
 	CGRect newFrame = origValue;
 	newFrame.size.width = ALELibraryPodWidth();
-	ALELog(@"pod iconLayoutRect %@ -> %@", NSStringFromCGRect(origValue), NSStringFromCGRect(newFrame));
 	return newFrame;
 }
 
@@ -349,7 +326,5 @@ extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature
 }
 
 %ctor {
-	if (![[NSFileManager defaultManager] fileExistsAtPath:kALEDisablePath]) {
-		%init;
-	}
+	%init;
 }
