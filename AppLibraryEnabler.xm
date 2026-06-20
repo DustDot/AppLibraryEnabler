@@ -18,6 +18,9 @@
 #import <objc/runtime.h>
 #import <string.h>
 
+static NSString * const kALEDisablePath = @"/var/mobile/Library/Preferences/com.tomaszpoliszuk.applibraryenabler.disable";
+static NSString * const kALELogPath = @"/var/mobile/Library/Preferences/com.tomaszpoliszuk.applibraryenabler.log";
+
 @interface UIView (AppLibraryEnabler)
 - (id)_viewControllerForAncestor;
 @end
@@ -50,6 +53,135 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+static id ALEValueForKey(id object, NSString *key) {
+	if (!object || !key) {
+		return nil;
+	}
+
+	@try {
+		return [object valueForKey:key];
+	} @catch (NSException *exception) {
+		return nil;
+	}
+}
+
+static BOOL ALEObjectIsKindOfClassNamed(id object, NSString *className) {
+	if (!object || !className) {
+		return NO;
+	}
+
+	Class cls = NSClassFromString(className);
+	if (cls) {
+		return [object isKindOfClass:cls];
+	}
+
+	for (Class currentClass = [object class]; currentClass; currentClass = class_getSuperclass(currentClass)) {
+		if ([NSStringFromClass(currentClass) isEqualToString:className]) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
+static BOOL ALEIsLibraryController(id controller) {
+	if (!controller) {
+		return NO;
+	}
+
+	if (ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryViewController") ||
+		ALEObjectIsKindOfClassNamed(controller, @"SBHLibrarySearchController") ||
+		ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryPodFolderController")) {
+		return YES;
+	}
+
+	id avocadoViewController = ALEValueForKey(controller, @"avocadoViewController");
+	if (avocadoViewController && avocadoViewController != controller) {
+		return ALEIsLibraryController(avocadoViewController);
+	}
+
+	id contentViewController = ALEValueForKey(controller, @"contentViewController");
+	if (contentViewController && contentViewController != controller) {
+		return ALEIsLibraryController(contentViewController);
+	}
+
+	return NO;
+}
+
+static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
+	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
+	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
+	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
+}
+
+static CGSize ALEInterfaceSize(void) {
+	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
+	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
+		return keyWindow.bounds.size;
+	}
+
+	return [UIScreen mainScreen].bounds.size;
+}
+
+static BOOL ALEIsLandscape(void) {
+	CGSize size = ALEInterfaceSize();
+	return size.width > size.height;
+}
+
+static CGFloat ALELibraryContentWidth(void) {
+	CGFloat width = ALEInterfaceSize().width;
+	return floor(width * (ALEIsLandscape() ? 0.673 : 0.847));
+}
+
+static CGFloat ALELibrarySearchWidth(void) {
+	CGFloat width = ALEInterfaceSize().width;
+	return floor(width * (ALEIsLandscape() ? 0.309 : 0.406));
+}
+
+static CGFloat ALELibrarySearchTop(void) {
+	CGFloat height = ALEInterfaceSize().height;
+	return floor(height * (ALEIsLandscape() ? 0.070 : 0.195));
+}
+
+static CGFloat ALELibraryPodWidth(void) {
+	CGFloat gap = ALEIsLandscape() ? 48.0 : 22.0;
+	return floor((ALELibraryContentWidth() - gap * 3.0) / 4.0);
+}
+
+static CGSize ALELibraryPodSpacing(CGSize originalSpacing) {
+	CGSize spacing = originalSpacing;
+	spacing.width = ALEIsLandscape() ? 33.0 : 27.0;
+	spacing.height = ALEIsLandscape() ? 37.0 : 31.0;
+	return spacing;
+}
+
+static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
+	CGFloat interfaceWidth = ALEInterfaceSize().width;
+	CGFloat targetWidth = ALELibrarySearchWidth();
+	if (targetWidth <= 0 || interfaceWidth <= 0) {
+		return frame;
+	}
+
+	frame.origin.x = floor((interfaceWidth - targetWidth) / 2.0);
+	frame.origin.y = ALELibrarySearchTop();
+	frame.size.width = targetWidth;
+	frame.size.height = MAX((CGFloat)44.0, frame.size.height);
+	return frame;
+}
+
+static void ALELog(NSString *format, ...) {
+	if (![[NSFileManager defaultManager] fileExistsAtPath:kALELogPath]) {
+		return;
+	}
+
+	va_list args;
+	va_start(args, format);
+	NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+	va_end(args);
+
+	NSLog(@"[AppLibraryEnabler] %@", message);
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -79,6 +211,25 @@
 %end
 
 %hook SBHomeScreenOverlayViewController
+-(CGFloat)contentWidth {
+	if (ALEOverlayShowsAppLibrary(self)) {
+		CGFloat width = ALEInterfaceSize().width;
+		if (width > 0) {
+			ALELog(@"overlay contentWidth -> %.2f", width);
+			return width;
+		}
+	}
+	return %orig;
+}
+
+-(CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
+	if (ALEOverlayShowsAppLibrary(self) && containerWidth > 0) {
+		ALELog(@"overlay contentWidthWithContainerWidth %.2f", containerWidth);
+		return containerWidth;
+	}
+	return %orig;
+}
+
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
 	[[self rightSidebarViewController].view setAlpha:origValue];
@@ -87,31 +238,55 @@
 %end
 
 %hook SBHLibrarySearchController
-- (void)viewDidAppear:(bool)arg1 {
+- (void)viewDidLayoutSubviews {
 	%orig;
-	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
-	UIView *containerView = [self valueForKey:@"_containerView"];
-	UIView *contentContainerView = [self valueForKey:@"_contentContainerView"];
-	UIView *searchResultsContainerView = [self valueForKey:@"_searchResultsContainerView"];
+	SBHSearchBar *searchBar = ALEValueForKey(self, @"_searchBar");
+	UIView *containerView = ALEValueForKey(self, @"_containerView");
+	UIView *contentContainerView = ALEValueForKey(self, @"_contentContainerView");
+	UIView *searchResultsContainerView = ALEValueForKey(self, @"_searchResultsContainerView");
 
-	CGRect selfFrame = self.view.frame;
+	CGRect selfFrame = self.view.bounds;
 	[containerView setFrame:selfFrame];
 	[contentContainerView setFrame:selfFrame];
 	[searchResultsContainerView setFrame:selfFrame];
 
-	UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		[searchBar setFrame:ALELibrarySearchBarFrame(searchBar, searchBar.frame)];
+		ALELog(@"search layout bounds=%@ search=%@", NSStringFromCGRect(selfFrame), NSStringFromCGRect(searchBar.frame));
+	}
+}
 
-	searchTextFieldHorizontalEdgeInsets.left = 23;
-	searchTextFieldHorizontalEdgeInsets.right = 23;
+- (void)viewDidAppear:(bool)arg1 {
+	%orig;
+	SBHSearchBar *searchBar = ALEValueForKey(self, @"_searchBar");
+	UIView *containerView = ALEValueForKey(self, @"_containerView");
+	UIView *contentContainerView = ALEValueForKey(self, @"_contentContainerView");
+	UIView *searchResultsContainerView = ALEValueForKey(self, @"_searchResultsContainerView");
 
-	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	CGRect selfFrame = self.view.bounds;
+	[containerView setFrame:selfFrame];
+	[contentContainerView setFrame:selfFrame];
+	[searchResultsContainerView setFrame:selfFrame];
+
+	if ([searchBar respondsToSelector:@selector(searchTextFieldHorizontalEdgeInsets)] &&
+		[searchBar respondsToSelector:@selector(setSearchTextFieldHorizontalEdgeInsets:)]) {
+		UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
+		searchTextFieldHorizontalEdgeInsets.left = 23;
+		searchTextFieldHorizontalEdgeInsets.right = 23;
+		[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
+	}
+
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		[searchBar setFrame:ALELibrarySearchBarFrame(searchBar, searchBar.frame)];
+		ALELog(@"search appeared bounds=%@ search=%@", NSStringFromCGRect(selfFrame), NSStringFromCGRect(searchBar.frame));
+	}
 }
 - (void)_layoutSearchViews {
 	%orig;
-	MTMaterialView *searchBackdropView = [self valueForKey:@"_searchBackdropView"];
+	MTMaterialView *searchBackdropView = ALEValueForKey(self, @"_searchBackdropView");
 
-	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
-	CGFloat height = [[UIScreen mainScreen] bounds].size.height;
+	CGFloat width = ALEInterfaceSize().width;
+	CGFloat height = ALEInterfaceSize().height;
 
 	CGRect fullScreenFrame = CGRectMake(
 		-100,
@@ -121,6 +296,12 @@
 	);
 	[searchBackdropView setBounds:fullScreenFrame];
 	[searchBackdropView setFrame:fullScreenFrame];
+	ALELog(@"search backdrop=%@", NSStringFromCGRect(fullScreenFrame));
+
+	SBHSearchBar *searchBar = ALEValueForKey(self, @"_searchBar");
+	if ([searchBar isKindOfClass:[UIView class]]) {
+		[searchBar setFrame:ALELibrarySearchBarFrame(searchBar, searchBar.frame)];
+	}
 }
 %end
 
@@ -137,29 +318,25 @@
 - (CGRect)frame {
 	CGRect origValue = %orig;
 	CGRect newContainerFrame = origValue;
-	newContainerFrame.size.width = 393;
+	newContainerFrame.size.width = ALELibraryPodWidth();
+	ALELog(@"pod frame %@ -> %@", NSStringFromCGRect(origValue), NSStringFromCGRect(newContainerFrame));
 	return newContainerFrame;
 }
 - (CGRect)iconLayoutRect {
 	CGRect origValue = %orig;
 	CGRect newFrame = origValue;
-	newFrame.size.width = 393;
+	newFrame.size.width = ALELibraryPodWidth();
+	ALELog(@"pod iconLayoutRect %@ -> %@", NSStringFromCGRect(origValue), NSStringFromCGRect(newFrame));
 	return newFrame;
 }
 
 - (CGSize)iconSpacing {
 	CGSize origValue = %orig;
-	CGSize newSize = origValue;
-	newSize.width = 33;
-	newSize.height = 37;
-	return newSize;
+	return ALELibraryPodSpacing(origValue);
 }
 - (CGSize)effectiveIconSpacing {
 	CGSize origValue = %orig;
-	CGSize newSize = origValue;
-	newSize.width = 33;
-	newSize.height = 37;
-	return newSize;
+	return ALELibraryPodSpacing(origValue);
 }
 %end
 
@@ -172,5 +349,7 @@ extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature
 }
 
 %ctor {
-	%init;
+	if (![[NSFileManager defaultManager] fileExistsAtPath:kALEDisablePath]) {
+		%init;
+	}
 }
