@@ -50,6 +50,21 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+struct SBHIconGridSize {
+	unsigned short columns;
+	unsigned short rows;
+};
+
+@interface SBFolder : NSObject
+- (struct SBHIconGridSize)listGridSize;
+@end
+
+@interface SBIconListModel : NSObject
+@property (nonatomic, readonly) SBFolder *folder;
+- (struct SBHIconGridSize)gridSize;
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
+@end
+
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -111,6 +126,10 @@ static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlay
 	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
 }
 
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
 static CGSize ALEInterfaceSize(void) {
 	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
 	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
@@ -166,6 +185,12 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 	return frame;
 }
 
+static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize gridSize) {
+	gridSize.columns = MAX(gridSize.columns, (unsigned short)8);
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)6);
+	return gridSize;
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -216,6 +241,33 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 	CGFloat origValue = %orig;
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
+}
+%end
+
+%hook SBFolder
+- (struct SBHIconGridSize)listGridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self)) {
+		return ALELibraryRootGridSize(gridSize);
+	}
+	return gridSize;
+}
+%end
+
+%hook SBIconListModel
+- (struct SBHIconGridSize)gridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryRootGridSize(gridSize);
+	}
+	return gridSize;
+}
+
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return %orig(ALELibraryRootGridSize(gridSize), options);
+	}
+	return %orig;
 }
 %end
 
