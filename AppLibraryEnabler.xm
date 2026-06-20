@@ -69,10 +69,6 @@ struct SBHIconGridSizeClassSizes {
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
 @end
 
-@interface SBIconListView : UIView
-@property (nonatomic, retain) SBIconListModel *model;
-@end
-
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -138,30 +134,6 @@ static BOOL ALEIsLibraryCategoriesRootFolder(id folder) {
 	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
-static BOOL ALEIsLibraryCategoriesRootListView(SBIconListView *listView) {
-	if (!listView) {
-		return NO;
-	}
-
-	SBIconListModel *model = nil;
-	if ([listView respondsToSelector:@selector(model)]) {
-		model = [listView model];
-	}
-	if (!model) {
-		model = ALEValueForKey(listView, @"model");
-	}
-
-	id folder = nil;
-	if ([model respondsToSelector:@selector(folder)]) {
-		folder = [model folder];
-	}
-	if (!folder) {
-		folder = ALEValueForKey(model, @"folder");
-	}
-
-	return ALEIsLibraryCategoriesRootFolder(folder);
-}
-
 static CGSize ALEInterfaceSize(void) {
 	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
 	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
@@ -217,25 +189,9 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 	return frame;
 }
 
-static CGRect ALELibraryRootListFrame(SBIconListView *listView, CGRect frame) {
-	CGFloat containerWidth = listView.superview.bounds.size.width;
-	if (containerWidth <= 0) {
-		containerWidth = ALEInterfaceSize().width;
-	}
-
-	CGFloat targetWidth = ALELibraryContentWidth();
-	if (targetWidth <= 0 || containerWidth <= 0) {
-		return frame;
-	}
-
-	frame.origin.x = floor((containerWidth - targetWidth) / 2.0);
-	frame.size.width = targetWidth;
-	return frame;
-}
-
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize gridSize) {
-	gridSize.columns = 8;
-	gridSize.rows = MAX(gridSize.rows, (unsigned short)6);
+	gridSize.columns = 4;
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)3);
 	return gridSize;
 }
 
@@ -304,46 +260,6 @@ static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize grid
 - (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		return %orig(ALELibraryRootGridSize(gridSize), options);
-	}
-	return %orig;
-}
-%end
-
-%hook SBIconListView
-- (void)setFrame:(CGRect)frame {
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		frame = ALELibraryRootListFrame(self, frame);
-	}
-	%orig(frame);
-}
-
-- (CGRect)frame {
-	CGRect frame = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		return ALELibraryRootListFrame(self, frame);
-	}
-	return frame;
-}
-
-- (CGRect)iconLayoutRect {
-	CGRect rect = %orig;
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		rect.origin.x = 0;
-		rect.size.width = ALELibraryContentWidth();
-	}
-	return rect;
-}
-
-- (unsigned long long)iconColumnsForCurrentOrientation {
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		return 8;
-	}
-	return %orig;
-}
-
-- (unsigned long long)iconsInRowForSpacingCalculation {
-	if (ALEIsLibraryCategoriesRootListView(self)) {
-		return 8;
 	}
 	return %orig;
 }
