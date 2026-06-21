@@ -68,6 +68,16 @@ struct SBHIconGridSize {
 - (void)layoutIconsIfNeeded;
 @end
 
+@interface SBHLibraryPodFolderView : UIView
+@property (assign,nonatomic) BOOL centersContentIfPossible;
+- (CGSize)_iconListViewSize;
+- (double)_pageWidth;
+- (CGSize)_scrollViewContentSize;
+- (CGRect)_frameForIconListAtIndex:(unsigned long long)index;
+- (CGRect)_iconListFrameForPageRect:(CGRect)pageRect atIndex:(unsigned long long)index;
+- (void)layoutIconListsWithAnimationType:(long long)animationType forceRelayout:(bool)forceRelayout;
+@end
+
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
 		return nil;
@@ -236,9 +246,63 @@ static void ALEExpandLibraryControllerView(UIViewController *controller) {
 	controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 }
 
-static CGFloat ALELibraryPodWidth(void) {
+static CGFloat ALELibraryRootContentWidth(void) {
 	CGFloat width = ALEInterfaceSize().width;
-	CGFloat contentWidth = floor(MIN(width * (ALEIsLandscape() ? 0.68 : 0.74), ALEIsLandscape() ? 980.0 : 700.0));
+	CGFloat maximumWidth = ALEIsLandscape() ? 1360.0 : 900.0;
+	CGFloat widthRatio = ALEIsLandscape() ? 0.78 : 0.76;
+	return floor(MIN(width * widthRatio, maximumWidth));
+}
+
+static CGFloat ALEExpandedLibraryRootWidth(CGFloat originalWidth) {
+	CGFloat targetWidth = ALELibraryRootContentWidth();
+	if (originalWidth > 0.0) {
+		targetWidth = MAX(targetWidth, floor(originalWidth * 2.0));
+	}
+
+	CGFloat interfaceWidth = ALEInterfaceSize().width;
+	if (interfaceWidth > 0.0) {
+		targetWidth = MIN(targetWidth, interfaceWidth);
+	}
+
+	return targetWidth;
+}
+
+static CGRect ALECenteredLibraryRootFrame(UIView *view, CGRect frame) {
+	CGFloat targetWidth = ALEExpandedLibraryRootWidth(CGRectGetWidth(frame));
+	if (targetWidth <= 0.0) {
+		return frame;
+	}
+
+	CGFloat containerWidth = CGRectGetWidth(view.bounds);
+	if (containerWidth <= 0.0) {
+		containerWidth = ALEInterfaceSize().width;
+	}
+
+	frame.size.width = targetWidth;
+	frame.origin.x = floor((containerWidth - targetWidth) / 2.0);
+	return frame;
+}
+
+static void ALEExpandLibraryPodFolderView(UIView *view) {
+	if (![view isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	CGRect frame = view.frame;
+	CGFloat targetWidth = ALEExpandedLibraryRootWidth(CGRectGetWidth(frame));
+	if (targetWidth > CGRectGetWidth(frame)) {
+		CGFloat containerWidth = CGRectGetWidth(view.superview.bounds);
+		if (containerWidth <= 0.0) {
+			containerWidth = ALEInterfaceSize().width;
+		}
+		frame.size.width = targetWidth;
+		frame.origin.x = floor((containerWidth - targetWidth) / 2.0);
+		view.frame = frame;
+	}
+}
+
+static CGFloat ALELibraryPodWidth(void) {
+	CGFloat contentWidth = ALELibraryRootContentWidth();
 	CGFloat gap = ALEIsLandscape() ? 48.0 : 28.0;
 	return floor((contentWidth - (gap * 3.0)) / 4.0);
 }
@@ -393,21 +457,65 @@ static CGRect ALELibrarySearchBarFrame(CGRect frame) {
 %hook SBHLibraryPodFolderController
 - (void)viewDidLayoutSubviews {
 	%orig;
+	ALEExpandLibraryPodFolderView(ALEValueForKey(self, @"podFolderView"));
 	ALEUnlockLibraryRootListGrid(ALEValueForKey(self, @"currentIconListView"));
 }
 
 - (void)viewWillAppear:(bool)arg1 {
 	%orig;
+	ALEExpandLibraryPodFolderView(ALEValueForKey(self, @"podFolderView"));
 	ALEUnlockLibraryRootListGrid(ALEValueForKey(self, @"currentIconListView"));
 }
 
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	ALEExpandLibraryPodFolderView(ALEValueForKey(self, @"podFolderView"));
 	ALEUnlockLibraryRootListGrid(ALEValueForKey(self, @"currentIconListView"));
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
 }
+%end
+
+%group AppLibraryPodFolderViewLayout
+
+%hook SBHLibraryPodFolderView
+- (BOOL)centersContentIfPossible {
+	return YES;
+}
+
+- (void)setCentersContentIfPossible:(BOOL)centersContentIfPossible {
+	%orig(YES);
+}
+
+- (CGSize)_iconListViewSize {
+	CGSize size = %orig;
+	size.width = ALEExpandedLibraryRootWidth(size.width);
+	return size;
+}
+
+- (double)_pageWidth {
+	double pageWidth = %orig;
+	return ALEExpandedLibraryRootWidth(pageWidth);
+}
+
+- (CGSize)_scrollViewContentSize {
+	CGSize size = %orig;
+	size.width = MAX(size.width, ALEExpandedLibraryRootWidth(size.width));
+	return size;
+}
+
+- (CGRect)_frameForIconListAtIndex:(unsigned long long)index {
+	CGRect frame = %orig;
+	return ALECenteredLibraryRootFrame(self, frame);
+}
+
+- (CGRect)_iconListFrameForPageRect:(CGRect)pageRect atIndex:(unsigned long long)index {
+	CGRect frame = %orig;
+	return ALECenteredLibraryRootFrame(self, frame);
+}
+%end
+
 %end
 
 %hook _SBHLibraryPodIconListView
@@ -444,4 +552,7 @@ extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature
 
 %ctor {
 	%init;
+	if (objc_getClass("SBHLibraryPodFolderView")) {
+		%init(AppLibraryPodFolderViewLayout);
+	}
 }
