@@ -181,6 +181,16 @@ static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
+static CGFloat ALEAlignedLibraryRootContentWidth(CGFloat interfaceWidth) {
+	CGFloat width = ALELibraryRootContentWidth(interfaceWidth);
+	CGFloat cellCount = 8.0;
+	if (width <= cellCount) {
+		return width;
+	}
+
+	return floor(width / cellCount) * cellCount;
+}
+
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize) {
 	struct SBHIconGridSize gridSize = originalGridSize;
 	gridSize.columns = MAX(gridSize.columns, (unsigned short)8);
@@ -196,7 +206,7 @@ static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *co
 	CGSize screenSize = ALELayoutInterfaceSize();
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
-	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
+	CGFloat rootContentWidth = ALEAlignedLibraryRootContentWidth(interfaceWidth);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = 8;
