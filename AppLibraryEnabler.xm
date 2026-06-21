@@ -54,19 +54,6 @@
 + (id)iconLocation;
 @end
 
-struct SBHIconGridSize {
-	unsigned short columns;
-	unsigned short rows;
-};
-
-struct SBHIconGridSizeClassSizes {
-	struct SBHIconGridSize small;
-	struct SBHIconGridSize medium;
-	struct SBHIconGridSize large;
-	struct SBHIconGridSize newsLargeTall;
-	struct SBHIconGridSize extraLarge;
-};
-
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
 @property (nonatomic) unsigned long long numberOfLandscapeRows;
@@ -75,13 +62,17 @@ struct SBHIconGridSizeClassSizes {
 @property (nonatomic) CGSize listSizeForIconSpacingCalculation;
 @property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
-@property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
 @end
 
 @interface SBIconListGridLayout : NSObject
 @property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
 - (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
 @end
+
+struct SBHIconGridSize {
+	unsigned short columns;
+	unsigned short rows;
+};
 
 @interface SBFolder : NSObject
 - (struct SBHIconGridSize)listGridSize;
@@ -190,13 +181,6 @@ static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
-static struct SBHIconGridSize ALEMakeGridSize(unsigned short columns, unsigned short rows) {
-	struct SBHIconGridSize gridSize;
-	gridSize.columns = columns;
-	gridSize.rows = rows;
-	return gridSize;
-}
-
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize) {
 	struct SBHIconGridSize gridSize = originalGridSize;
 	gridSize.columns = MAX(gridSize.columns, (unsigned short)8);
@@ -240,16 +224,6 @@ static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *co
 		insets.left = MAX((CGFloat)0.0, (interfaceWidth - rootContentWidth) / 2.0);
 		insets.right = insets.left;
 		configuration.portraitLayoutInsets = insets;
-	}
-	if ([configuration respondsToSelector:@selector(setIconGridSizeClassSizes:)]) {
-		struct SBHIconGridSize podGridSize = ALEMakeGridSize(2, 2);
-		struct SBHIconGridSizeClassSizes classSizes = configuration.iconGridSizeClassSizes;
-		classSizes.small = podGridSize;
-		classSizes.medium = podGridSize;
-		classSizes.large = podGridSize;
-		classSizes.newsLargeTall = podGridSize;
-		classSizes.extraLarge = podGridSize;
-		configuration.iconGridSizeClassSizes = classSizes;
 	}
 }
 
