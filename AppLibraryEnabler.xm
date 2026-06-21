@@ -50,10 +50,6 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
-@interface SBFolderView : UIView
-@property (nonatomic, retain) id folder;
-@end
-
 struct SBHIconGridSize {
 	unsigned short columns;
 	unsigned short rows;
@@ -194,22 +190,6 @@ static CGRect ALELibrarySearchBarFrame(UIView *searchBar, CGRect frame) {
 	return frame;
 }
 
-static CGRect ALELibraryRootIconListFrame(UIView *view, CGRect frame) {
-	CGFloat containerWidth = view.bounds.size.width;
-	if (containerWidth <= 0) {
-		containerWidth = ALEInterfaceSize().width;
-	}
-
-	CGFloat targetWidth = ALELibraryContentWidth();
-	if (targetWidth <= 0 || containerWidth <= 0) {
-		return frame;
-	}
-
-	frame.origin.x = floor((containerWidth - targetWidth) / 2.0);
-	frame.size.width = targetWidth;
-	return frame;
-}
-
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize gridSize) {
 	gridSize.columns = 4;
 	gridSize.rows = MAX(gridSize.rows, (unsigned short)3);
@@ -308,24 +288,6 @@ static struct SBHIconGridSizeClassSizes ALELibraryRootGridSizeClassSizes(struct 
 		return ALELibraryRootGridSizeClassSizes(classSizes);
 	}
 	return classSizes;
-}
-%end
-
-%hook SBFolderView
-- (CGRect)_frameForIconListAtIndex:(unsigned long long)index {
-	CGRect frame = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALELibraryRootIconListFrame(self, frame);
-	}
-	return frame;
-}
-
-- (CGRect)_iconListFrameForPageRect:(CGRect)pageRect atIndex:(unsigned long long)index {
-	CGRect frame = %orig;
-	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
-		return ALELibraryRootIconListFrame(self, frame);
-	}
-	return frame;
 }
 %end
 
