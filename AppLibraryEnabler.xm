@@ -50,6 +50,142 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+@interface SBHLibraryPodFolderController (AppLibraryEnabler)
++ (id)iconLocation;
+@end
+
+@interface SBIconListGridLayoutConfiguration : NSObject
+@property (nonatomic) unsigned long long numberOfLandscapeColumns;
+@property (nonatomic) unsigned long long numberOfLandscapeRows;
+@property (nonatomic) unsigned long long numberOfPortraitColumns;
+@property (nonatomic) unsigned long long numberOfPortraitRows;
+@property (nonatomic) CGSize listSizeForIconSpacingCalculation;
+@property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
+@property (nonatomic) UIEdgeInsets portraitLayoutInsets;
+@end
+
+@interface SBIconListGridLayout : NSObject
+@property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
+- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
+@end
+
+static BOOL ALEConfiguringLibraryRootLayout = NO;
+static char ALEAppLibraryRootLayoutKey;
+
+static id ALEValueForKey(id object, NSString *key) {
+	if (!object || !key) {
+		return nil;
+	}
+
+	@try {
+		return [object valueForKey:key];
+	} @catch (NSException *exception) {
+		return nil;
+	}
+}
+
+static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
+	if (firstObject == secondObject) {
+		return YES;
+	}
+	if (!firstObject || !secondObject || ![firstObject respondsToSelector:@selector(isEqual:)]) {
+		return NO;
+	}
+
+	return [firstObject isEqual:secondObject];
+}
+
+static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
+	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
+	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
+		return NO;
+	}
+
+	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
+}
+
+static CGSize ALECurrentInterfaceSize(void) {
+	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
+	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
+		return keyWindow.bounds.size;
+	}
+
+	return [UIScreen mainScreen].bounds.size;
+}
+
+static BOOL ALEIsLandscapeScreen(void) {
+	CGSize interfaceSize = ALECurrentInterfaceSize();
+	if (interfaceSize.width != interfaceSize.height) {
+		return interfaceSize.width > interfaceSize.height;
+	}
+
+	NSNumber *orientationValue = ALEValueForKey([UIApplication sharedApplication], @"statusBarOrientation");
+	if ([orientationValue isKindOfClass:[NSNumber class]]) {
+		UIInterfaceOrientation orientation = (UIInterfaceOrientation)[orientationValue integerValue];
+		if (orientation != UIInterfaceOrientationUnknown) {
+			return UIInterfaceOrientationIsLandscape(orientation);
+		}
+	}
+
+	return interfaceSize.width > interfaceSize.height;
+}
+
+static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
+	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.66 : 0.64);
+	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 600.0;
+	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 760.0;
+	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
+}
+
+static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *configuration) {
+	if (!configuration) {
+		return;
+	}
+
+	CGSize screenSize = ALECurrentInterfaceSize();
+	CGFloat interfaceWidth = screenSize.width;
+	CGFloat interfaceHeight = screenSize.height;
+	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
+
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
+		configuration.numberOfLandscapeColumns = 8;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeRows:)]) {
+		configuration.numberOfLandscapeRows = 8;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
+		configuration.numberOfPortraitColumns = 8;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
+		configuration.numberOfPortraitRows = 10;
+	}
+	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
+		configuration.listSizeForIconSpacingCalculation = CGSizeMake(rootContentWidth, interfaceHeight);
+	}
+	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
+		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
+		insets.left = MAX((CGFloat)0.0, (interfaceWidth - rootContentWidth) / 2.0);
+		insets.right = insets.left;
+		configuration.landscapeLayoutInsets = insets;
+	}
+	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
+		UIEdgeInsets insets = configuration.portraitLayoutInsets;
+		insets.left = MAX((CGFloat)0.0, (interfaceWidth - rootContentWidth) / 2.0);
+		insets.right = insets.left;
+		configuration.portraitLayoutInsets = insets;
+	}
+}
+
+static void ALEConfigureLayoutForLibraryRoot(id layout) {
+	if (![layout respondsToSelector:@selector(layoutConfiguration)]) {
+		return;
+	}
+
+	SBIconListGridLayoutConfiguration *configuration = [layout layoutConfiguration];
+	ALEConfigureAppLibraryRootGrid(configuration);
+	objc_setAssociatedObject(layout, &ALEAppLibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -74,6 +210,50 @@
 	if ( [folder isKindOfClass:%c( SBHLibraryCategoriesRootFolder )] ) {
 		return YES;
 	}
+	return origValue;
+}
+%end
+
+%hook SBHDefaultIconListLayoutProvider
+- (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
+	%orig;
+	if (ALEConfiguringLibraryRootLayout) {
+		ALEConfigureAppLibraryRootGrid(configuration);
+	}
+}
+
+- (id)makeLayoutForIconLocation:(id)iconLocation {
+	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
+	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryRootLayout = previousRootLayout;
+
+	if (ALEIsLibraryRootIconLocation(iconLocation)) {
+		ALEConfigureLayoutForLibraryRoot(layout);
+	}
+	return layout;
+}
+
+- (id)layoutForIconLocation:(id)iconLocation {
+	BOOL previousRootLayout = ALEConfiguringLibraryRootLayout;
+	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
+	id layout = %orig;
+	ALEConfiguringLibraryRootLayout = previousRootLayout;
+
+	if (ALEIsLibraryRootIconLocation(iconLocation)) {
+		ALEConfigureLayoutForLibraryRoot(layout);
+	}
+	return layout;
+}
+%end
+
+%hook SBIconListGridLayout
+- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation {
+	unsigned long long origValue = %orig;
+	if ([objc_getAssociatedObject(self, &ALEAppLibraryRootLayoutKey) boolValue]) {
+		return MAX(origValue, (unsigned long long)8);
+	}
+
 	return origValue;
 }
 %end
