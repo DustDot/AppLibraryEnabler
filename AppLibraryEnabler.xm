@@ -152,11 +152,6 @@ static CGSize ALECurrentInterfaceSize(void) {
 }
 
 static BOOL ALEIsLandscapeScreen(void) {
-	CGSize interfaceSize = ALECurrentInterfaceSize();
-	if (interfaceSize.width != interfaceSize.height) {
-		return interfaceSize.width > interfaceSize.height;
-	}
-
 	NSNumber *orientationValue = ALEValueForKey([UIApplication sharedApplication], @"statusBarOrientation");
 	if ([orientationValue isKindOfClass:[NSNumber class]]) {
 		UIInterfaceOrientation orientation = (UIInterfaceOrientation)[orientationValue integerValue];
@@ -165,13 +160,24 @@ static BOOL ALEIsLandscapeScreen(void) {
 		}
 	}
 
+	CGSize interfaceSize = ALECurrentInterfaceSize();
 	return interfaceSize.width > interfaceSize.height;
 }
 
+static CGSize ALELayoutInterfaceSize(void) {
+	CGSize interfaceSize = ALECurrentInterfaceSize();
+	BOOL landscape = ALEIsLandscapeScreen();
+	return CGSizeMake(
+		landscape ? MAX(interfaceSize.width, interfaceSize.height) : MIN(interfaceSize.width, interfaceSize.height),
+		landscape ? MIN(interfaceSize.width, interfaceSize.height) : MAX(interfaceSize.width, interfaceSize.height)
+	);
+}
+
 static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
-	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.66 : 0.64);
-	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 600.0;
-	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 760.0;
+	BOOL landscape = ALEIsLandscapeScreen();
+	CGFloat width = interfaceWidth * (landscape ? 0.72 : 0.86);
+	CGFloat minimumWidth = landscape ? 1040.0 : 960.0;
+	CGFloat maximumWidth = landscape ? 1320.0 : 1180.0;
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
@@ -187,7 +193,7 @@ static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *co
 		return;
 	}
 
-	CGSize screenSize = ALECurrentInterfaceSize();
+	CGSize screenSize = ALELayoutInterfaceSize();
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
 	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
