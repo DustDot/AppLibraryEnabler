@@ -320,6 +320,21 @@ static CGFloat ALELibraryRootTopAdjustment(void) {
 	return ALEIsLandscapeScreen() ? 20.0 : 24.0;
 }
 
+static CGFloat ALELibraryRootTopYForView(UIView *view) {
+	CGFloat height = CGRectGetHeight(view.bounds);
+	if (height <= 0) {
+		height = CGRectGetHeight(view.superview.bounds);
+	}
+	if (height <= 0) {
+		height = ALECurrentInterfaceSize().height;
+	}
+
+	CGFloat ratioY = floor(height * (ALEIsLandscapeScreen() ? 0.31 : 0.27));
+	CGFloat minimumY = ALEIsLandscapeScreen() ? 250.0 : 300.0;
+	CGFloat maximumY = ALEIsLandscapeScreen() ? 330.0 : 400.0;
+	return MIN(MAX(ratioY, minimumY), maximumY);
+}
+
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
 	if (!listView || ![listView respondsToSelector:@selector(model)]) {
 		return NO;
@@ -476,7 +491,6 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	}
 
 	NSUInteger columnCount = ALELibraryRootPodColumnCount();
-	CGFloat topY = CGFLOAT_MAX;
 	CGFloat podWidth = 0;
 	CGFloat podHeight = 0;
 
@@ -493,14 +507,9 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 
 		podWidth = MAX(podWidth, CGRectGetWidth(frame));
 		podHeight = MAX(podHeight, CGRectGetHeight(frame));
-
-		CGFloat y = CGRectGetMinY(frame);
-		if (y < topY - 1.0) {
-			topY = y;
-		}
 	}
 
-	if (podWidth <= 0 || podHeight <= 0 || topY == CGFLOAT_MAX || columnCount == 0) {
+	if (podWidth <= 0 || podHeight <= 0 || columnCount == 0) {
 		return 0;
 	}
 
@@ -509,7 +518,7 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	gridWidth = MIN(gridWidth, listWidth);
 	CGFloat gridLeft = floor((listWidth - gridWidth) / 2.0);
 
-	topY += ALELibraryRootTopAdjustment();
+	CGFloat topY = ALELibraryRootTopYForView(listView) + ALELibraryRootTopAdjustment();
 	CGFloat rowStep = podHeight + ALELibraryRootRowGap(podHeight);
 
 	NSUInteger rowCount = ALELibraryRootRowCount(listView);
