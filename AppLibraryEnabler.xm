@@ -234,7 +234,7 @@ static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *co
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
 	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGFloat horizontalInset = MAX((CGFloat)0.0, floor((interfaceWidth - rootContentWidth) / 2.0));
+	CGFloat horizontalInset = 0.0;
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = 8;
