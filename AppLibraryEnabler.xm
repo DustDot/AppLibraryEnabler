@@ -291,6 +291,24 @@ static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
+static CGFloat ALELibraryRootColumnGap(CGFloat podWidth) {
+	CGFloat ratioGap = floor(podWidth * (ALEIsLandscapeScreen() ? 0.23 : 0.18));
+	CGFloat minimumGap = ALEIsLandscapeScreen() ? 32.0 : 24.0;
+	CGFloat maximumGap = ALEIsLandscapeScreen() ? 38.0 : 32.0;
+	return MIN(MAX(ratioGap, minimumGap), maximumGap);
+}
+
+static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
+	CGFloat ratioGap = floor(podHeight * (ALEIsLandscapeScreen() ? 0.28 : 0.26));
+	CGFloat minimumGap = ALEIsLandscapeScreen() ? 42.0 : 42.0;
+	CGFloat maximumGap = ALEIsLandscapeScreen() ? 52.0 : 52.0;
+	return MIN(MAX(ratioGap, minimumGap), maximumGap);
+}
+
+static CGFloat ALELibraryRootTopAdjustment(void) {
+	return ALEIsLandscapeScreen() ? 20.0 : 24.0;
+}
+
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
 	if (!listView || ![listView respondsToSelector:@selector(model)]) {
 		return NO;
@@ -448,7 +466,6 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 
 	NSUInteger columnCount = ALELibraryRootPodColumnCount();
 	CGFloat topY = CGFLOAT_MAX;
-	CGFloat secondY = CGFLOAT_MAX;
 	CGFloat podWidth = 0;
 	CGFloat podHeight = 0;
 
@@ -468,10 +485,7 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 
 		CGFloat y = CGRectGetMinY(frame);
 		if (y < topY - 1.0) {
-			secondY = topY;
 			topY = y;
-		} else if (y > topY + 8.0 && y < secondY - 1.0) {
-			secondY = y;
 		}
 	}
 
@@ -479,18 +493,13 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 		return 0;
 	}
 
-	CGFloat gridWidth = ALELibraryRootContentWidth(listWidth);
-	CGFloat minimumColumnGap = ALEIsLandscapeScreen() ? 48.0 : 28.0;
-	gridWidth = MAX(gridWidth, (podWidth * columnCount) + (minimumColumnGap * (columnCount - 1)));
+	CGFloat columnGap = ALELibraryRootColumnGap(podWidth);
+	CGFloat gridWidth = (podWidth * columnCount) + (columnGap * (columnCount - 1));
 	gridWidth = MIN(gridWidth, listWidth);
 	CGFloat gridLeft = floor((listWidth - gridWidth) / 2.0);
-	CGFloat columnGap = columnCount > 1 ? (gridWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
-	columnGap = MAX((CGFloat)0, columnGap);
 
-	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
-	if (rowStep < podHeight + 28.0) {
-		rowStep = podHeight + 36.0;
-	}
+	topY += ALELibraryRootTopAdjustment();
+	CGFloat rowStep = podHeight + ALELibraryRootRowGap(podHeight);
 
 	NSUInteger rowCount = ALELibraryRootRowCount(listView);
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
