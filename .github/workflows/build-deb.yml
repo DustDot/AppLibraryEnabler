@@ -29,11 +29,17 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            if [ "$status" -eq 8 ] && ls "$HOME/theos/sdks"/iPhoneOS*.sdk >/dev/null 2>&1; then
-              echo "Theos installed the iPhoneOS SDK; ignoring non-iPhoneOS SDK install failure."
+            if [ "$status" -eq 8 ] && [ -d "$HOME/theos" ]; then
+              echo "Theos installer reported an SDK install failure; installing the SDK explicitly."
             else
               exit "$status"
             fi
+          fi
+          if ! ls "$HOME/theos/sdks"/iPhoneOS*.sdk >/dev/null 2>&1; then
+            mkdir -p "$HOME/theos/sdks"
+            curl -fL --retry 3 -o /tmp/iPhoneOS16.5.sdk.tar.xz \
+              https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+            tar -xJf /tmp/iPhoneOS16.5.sdk.tar.xz -C "$HOME/theos/sdks"
           fi
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
           echo "$HOME/theos/bin" >> "$GITHUB_PATH"
