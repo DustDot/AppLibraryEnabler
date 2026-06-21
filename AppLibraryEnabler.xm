@@ -69,6 +69,21 @@
 - (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
 @end
 
+struct SBHIconGridSize {
+	unsigned short columns;
+	unsigned short rows;
+};
+
+@interface SBFolder : NSObject
+- (struct SBHIconGridSize)listGridSize;
+@end
+
+@interface SBIconListModel : NSObject
+@property (nonatomic, readonly) SBFolder *folder;
+- (struct SBHIconGridSize)gridSize;
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
+@end
+
 static BOOL ALEConfiguringLibraryRootLayout = NO;
 static char ALEAppLibraryRootLayoutKey;
 
@@ -95,6 +110,25 @@ static BOOL ALEObjectsEqual(id firstObject, id secondObject) {
 	return [firstObject isEqual:secondObject];
 }
 
+static BOOL ALEObjectIsKindOfClassNamed(id object, NSString *className) {
+	if (!object || !className) {
+		return NO;
+	}
+
+	Class cls = NSClassFromString(className);
+	if (cls) {
+		return [object isKindOfClass:cls];
+	}
+
+	for (Class currentClass = object_getClass(object); currentClass; currentClass = class_getSuperclass(currentClass)) {
+		if ([NSStringFromClass(currentClass) isEqualToString:className]) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
 static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
 	Class podFolderControllerClass = NSClassFromString(@"SBHLibraryPodFolderController");
 	if (!podFolderControllerClass || ![podFolderControllerClass respondsToSelector:@selector(iconLocation)]) {
@@ -102,6 +136,10 @@ static BOOL ALEIsLibraryRootIconLocation(id iconLocation) {
 	}
 
 	return ALEObjectsEqual(iconLocation, [podFolderControllerClass iconLocation]);
+}
+
+static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
 static CGSize ALECurrentInterfaceSize(void) {
@@ -135,6 +173,13 @@ static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 600.0;
 	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 760.0;
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
+}
+
+static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize) {
+	struct SBHIconGridSize gridSize = originalGridSize;
+	gridSize.columns = MAX(gridSize.columns, (unsigned short)8);
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)(ALEIsLandscapeScreen() ? 8 : 10));
+	return gridSize;
 }
 
 static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *configuration) {
@@ -255,6 +300,36 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	}
 
 	return origValue;
+}
+%end
+
+%hook SBFolder
+- (struct SBHIconGridSize)listGridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self)) {
+		return ALELibraryRootGridSize(gridSize);
+	}
+
+	return gridSize;
+}
+%end
+
+%hook SBIconListModel
+- (struct SBHIconGridSize)gridSize {
+	struct SBHIconGridSize gridSize = %orig;
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return ALELibraryRootGridSize(gridSize);
+	}
+
+	return gridSize;
+}
+
+- (id)gridCellInfoForGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options {
+	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
+		return %orig(ALELibraryRootGridSize(gridSize), options);
+	}
+
+	return %orig;
 }
 %end
 
