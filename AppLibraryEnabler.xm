@@ -329,9 +329,9 @@ static CGFloat ALELibraryRootTopYForView(UIView *view) {
 		height = ALECurrentInterfaceSize().height;
 	}
 
-	CGFloat ratioY = floor(height * (ALEIsLandscapeScreen() ? 0.31 : 0.27));
-	CGFloat minimumY = ALEIsLandscapeScreen() ? 250.0 : 300.0;
-	CGFloat maximumY = ALEIsLandscapeScreen() ? 330.0 : 400.0;
+	CGFloat ratioY = floor(height * (ALEIsLandscapeScreen() ? 0.22 : 0.18));
+	CGFloat minimumY = ALEIsLandscapeScreen() ? 170.0 : 210.0;
+	CGFloat maximumY = ALEIsLandscapeScreen() ? 260.0 : 300.0;
 	return MIN(MAX(ratioY, minimumY), maximumY);
 }
 
