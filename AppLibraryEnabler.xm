@@ -228,20 +228,6 @@ static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
-static CGFloat ALELibraryRootPodWidth(void) {
-	CGFloat interfaceWidth = ALECurrentInterfaceSize().width;
-	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGFloat columnGap = ALEIsLandscapeScreen() ? 48.0 : 28.0;
-	return floor((rootContentWidth - (columnGap * 3.0)) / 4.0);
-}
-
-static CGSize ALELibraryRootPodSpacing(CGSize originalSpacing) {
-	CGSize spacing = originalSpacing;
-	spacing.width = ALEIsLandscapeScreen() ? 24.0 : 18.0;
-	spacing.height = ALEIsLandscapeScreen() ? 28.0 : 22.0;
-	return spacing;
-}
-
 static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL rootLayout) {
 	if (!configuration) {
 		return;
@@ -250,7 +236,8 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGSize screenSize = ALECurrentInterfaceSize();
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
-	CGSize spacingSize = CGSizeMake(interfaceWidth, interfaceHeight);
+	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
+	CGSize spacingSize = CGSizeMake(rootLayout ? rootContentWidth : interfaceWidth, interfaceHeight);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = rootLayout ? 8 : 4;
@@ -269,13 +256,13 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	}
 	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
-		insets.left = rootLayout ? 0.0 : MAX((CGFloat)96.0, interfaceWidth * 0.11);
+		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)96.0, interfaceWidth * 0.11);
 		insets.right = insets.left;
 		configuration.landscapeLayoutInsets = insets;
 	}
 	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.portraitLayoutInsets;
-		insets.left = rootLayout ? 0.0 : MAX((CGFloat)72.0, interfaceWidth * 0.105);
+		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)72.0, interfaceWidth * 0.105);
 		insets.right = insets.left;
 		configuration.portraitLayoutInsets = insets;
 	}
@@ -447,30 +434,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
-}
-%end
-
-%hook _SBHLibraryPodIconListView
-- (CGRect)frame {
-	CGRect origValue = %orig;
-	CGRect newContainerFrame = origValue;
-	newContainerFrame.size.width = ALELibraryRootPodWidth();
-	return newContainerFrame;
-}
-- (CGRect)iconLayoutRect {
-	CGRect origValue = %orig;
-	CGRect newFrame = origValue;
-	newFrame.size.width = ALELibraryRootPodWidth();
-	return newFrame;
-}
-
-- (CGSize)iconSpacing {
-	CGSize origValue = %orig;
-	return ALELibraryRootPodSpacing(origValue);
-}
-- (CGSize)effectiveIconSpacing {
-	CGSize origValue = %orig;
-	return ALELibraryRootPodSpacing(origValue);
 }
 %end
 
