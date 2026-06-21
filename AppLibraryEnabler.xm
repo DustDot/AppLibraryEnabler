@@ -321,23 +321,30 @@ static CGFloat ALELibraryRootTopAdjustment(void) {
 }
 
 static CGFloat ALELibraryRootTopYForView(UIView *view, CGFloat podHeight, CGFloat rowStep, NSUInteger rowCount) {
-	CGFloat height = CGRectGetHeight(view.bounds);
-	if (height <= 0) {
-		height = CGRectGetHeight(view.superview.bounds);
+	UIView *coordinateView = view.window ?: view.superview;
+	CGRect bounds = [coordinateView isKindOfClass:[UIView class]] ? coordinateView.bounds : CGRectZero;
+	CGFloat height = CGRectGetHeight(bounds);
+	if (height <= 0 && view) {
+		bounds = view.bounds;
+		height = CGRectGetHeight(bounds);
 	}
 	if (height <= 0) {
 		height = ALECurrentInterfaceSize().height;
+		bounds = CGRectMake(0, 0, ALECurrentInterfaceSize().width, height);
 	}
 
 	CGFloat gridHeight = podHeight + (rowStep * MAX((NSInteger)rowCount - 1, 0));
 	CGFloat availableTop = floor(height * (ALEIsLandscapeScreen() ? 0.24 : 0.16));
 	CGFloat availableBottom = floor(height * (ALEIsLandscapeScreen() ? 0.93 : 0.94));
 	CGFloat availableHeight = MAX((CGFloat)0, availableBottom - availableTop);
-	if (gridHeight >= availableHeight) {
-		return availableTop;
+	CGFloat targetY = gridHeight >= availableHeight ? availableTop : floor(availableTop + ((availableHeight - gridHeight) / 2.0));
+
+	if ([coordinateView isKindOfClass:[UIView class]] && view) {
+		CGPoint targetPoint = CGPointMake(CGRectGetMidX(bounds), targetY);
+		return floor([view convertPoint:targetPoint fromView:coordinateView].y);
 	}
 
-	return floor(availableTop + ((availableHeight - gridHeight) / 2.0));
+	return targetY;
 }
 
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
