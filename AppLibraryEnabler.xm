@@ -448,6 +448,20 @@ static void ALEUpdateLibraryRootScrollRange(SBIconListView *listView, CGFloat co
 	}
 }
 
+static CGFloat ALEHorizontalCenterInView(UIView *view) {
+	if (!view) {
+		return 0;
+	}
+
+	UIView *coordinateView = view.window ?: view.superview;
+	if ([coordinateView isKindOfClass:[UIView class]] && CGRectGetWidth(coordinateView.bounds) > 0) {
+		CGPoint center = CGPointMake(CGRectGetMidX(coordinateView.bounds), CGRectGetMidY(coordinateView.bounds));
+		return [view convertPoint:center fromView:coordinateView].x;
+	}
+
+	return CGRectGetMidX(view.bounds);
+}
+
 static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	if (ALEUpdatingLibraryRootLayout || !ALEIsLibraryRootListView(listView) || ![listView respondsToSelector:@selector(icons)] || ![listView respondsToSelector:@selector(iconViewForIcon:)]) {
 		return 0;
@@ -498,7 +512,10 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	CGFloat columnGap = ALELibraryRootColumnGap(podWidth);
 	CGFloat gridWidth = (podWidth * columnCount) + (columnGap * (columnCount - 1));
 	gridWidth = MIN(gridWidth, listWidth);
-	CGFloat gridLeft = floor((listWidth - gridWidth) / 2.0);
+	CGFloat gridLeft = floor(ALEHorizontalCenterInView(listView) - (gridWidth / 2.0));
+	if (listWidth >= gridWidth) {
+		gridLeft = MIN(MAX(gridLeft, (CGFloat)0), listWidth - gridWidth);
+	}
 
 	topY += ALELibraryRootTopAdjustment();
 	CGFloat rowStep = podHeight + ALELibraryRootRowGap(podHeight);
