@@ -437,36 +437,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 }
 %end
 
-%hook _SBHLibraryPodIconListView
-- (CGRect)frame {
-	CGRect origValue = %orig;
-	CGRect newContainerFrame = origValue;
-	newContainerFrame.size.width = 393;
-	return newContainerFrame;
-}
-- (CGRect)iconLayoutRect {
-	CGRect origValue = %orig;
-	CGRect newFrame = origValue;
-	newFrame.size.width = 393;
-	return newFrame;
-}
-
-- (CGSize)iconSpacing {
-	CGSize origValue = %orig;
-	CGSize newSize = origValue;
-	newSize.width = 33;
-	newSize.height = 37;
-	return newSize;
-}
-- (CGSize)effectiveIconSpacing {
-	CGSize origValue = %orig;
-	CGSize newSize = origValue;
-	newSize.width = 33;
-	newSize.height = 37;
-	return newSize;
-}
-%end
-
 extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature);
 %hookf(bool, _os_feature_enabled_impl, const char *domain, const char *feature) {
 	if (strcmp(domain, "SpringBoard") == 0 && strcmp(feature, "Dewey") == 0) {
