@@ -48,6 +48,24 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
+@property (nonatomic,readonly) id currentIconListView;
+@end
+
+struct SBHIconGridSize {
+	unsigned short columns;
+	unsigned short rows;
+};
+
+@interface SBIconListModel : NSObject
+@property (nonatomic) struct SBHIconGridSize gridSize;
+@property (nonatomic, readonly) id folder;
+- (id)changeGridSize:(struct SBHIconGridSize)gridSize options:(unsigned long long)options;
+@end
+
+@interface SBIconListView : UIView
+@property (nonatomic, readonly) SBIconListModel *model;
+- (void)layoutIconsNow;
+- (void)layoutIconsIfNeeded;
 @end
 
 static id ALEValueForKey(id object, NSString *key) {
@@ -122,6 +140,83 @@ static BOOL ALEIsLandscape(void) {
 static CGRect ALELibraryFullScreenFrame(void) {
 	CGSize size = ALEInterfaceSize();
 	return CGRectMake(0.0, 0.0, size.width, size.height);
+}
+
+static struct SBHIconGridSize ALEMakeGridSize(unsigned short columns, unsigned short rows) {
+	struct SBHIconGridSize gridSize;
+	gridSize.columns = columns;
+	gridSize.rows = rows;
+	return gridSize;
+}
+
+static BOOL ALEIsLibraryCategoriesRootFolder(id folder) {
+	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
+}
+
+static BOOL ALEIsLibraryCategoriesRootListView(id listView) {
+	if (!ALEObjectIsKindOfClassNamed(listView, @"SBIconListView") &&
+		!ALEObjectIsKindOfClassNamed(listView, @"_SBHLibraryPodIconListView")) {
+		return NO;
+	}
+
+	id model = nil;
+	if ([listView respondsToSelector:@selector(model)]) {
+		model = [listView model];
+	}
+	if (!model) {
+		model = ALEValueForKey(listView, @"model");
+	}
+
+	id folder = nil;
+	if ([model respondsToSelector:@selector(folder)]) {
+		folder = [model folder];
+	}
+	if (!folder) {
+		folder = ALEValueForKey(model, @"folder");
+	}
+
+	return ALEIsLibraryCategoriesRootFolder(folder);
+}
+
+static void ALEUnlockLibraryRootListGrid(id listView) {
+	if (!ALEIsLibraryCategoriesRootListView(listView)) {
+		return;
+	}
+
+	SBIconListModel *model = nil;
+	if ([listView respondsToSelector:@selector(model)]) {
+		model = [(SBIconListView *)listView model];
+	}
+	if (!model) {
+		model = ALEValueForKey(listView, @"model");
+	}
+	if (!model) {
+		return;
+	}
+
+	struct SBHIconGridSize targetGridSize = ALEMakeGridSize(4, ALEIsLandscape() ? 6 : 8);
+	struct SBHIconGridSize currentGridSize = ALEMakeGridSize(0, 0);
+	if ([model respondsToSelector:@selector(gridSize)]) {
+		currentGridSize = [model gridSize];
+	}
+	if (currentGridSize.columns == targetGridSize.columns && currentGridSize.rows >= targetGridSize.rows) {
+		return;
+	}
+
+	if ([model respondsToSelector:@selector(changeGridSize:options:)]) {
+		[model changeGridSize:targetGridSize options:0];
+	} else if ([model respondsToSelector:@selector(setGridSize:)]) {
+		[model setGridSize:targetGridSize];
+	}
+
+	if ([listView respondsToSelector:@selector(setNeedsLayout)]) {
+		[listView setNeedsLayout];
+	}
+	if ([listView respondsToSelector:@selector(layoutIconsNow)]) {
+		[listView layoutIconsNow];
+	} else if ([listView respondsToSelector:@selector(layoutIconsIfNeeded)]) {
+		[listView layoutIconsIfNeeded];
+	}
 }
 
 static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
@@ -296,8 +391,19 @@ static CGRect ALELibrarySearchBarFrame(CGRect frame) {
 %end
 
 %hook SBHLibraryPodFolderController
+- (void)viewDidLayoutSubviews {
+	%orig;
+	ALEUnlockLibraryRootListGrid(ALEValueForKey(self, @"currentIconListView"));
+}
+
+- (void)viewWillAppear:(bool)arg1 {
+	%orig;
+	ALEUnlockLibraryRootListGrid(ALEValueForKey(self, @"currentIconListView"));
+}
+
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
+	ALEUnlockLibraryRootListGrid(ALEValueForKey(self, @"currentIconListView"));
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
