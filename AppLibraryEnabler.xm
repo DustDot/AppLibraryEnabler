@@ -115,9 +115,11 @@ static BOOL ALEConfiguringLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootLayout = NO;
 static BOOL ALEUpdatingLibraryRootScrollRange = NO;
 static BOOL ALEUpdatingLibraryRootVisibility = NO;
+static BOOL ALEHasLastLibraryRootGridFrame = NO;
 static NSRange ALELastLibraryRootVisibleColumnRange = {NSNotFound, 0};
 static NSRange ALELastLibraryRootVisibleRowRange = {NSNotFound, 0};
 static SBIconListView *ALELastLibraryRootVisibleListView = nil;
+static CGRect ALELastLibraryRootGridFrameInWindow = CGRectZero;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -503,6 +505,8 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 
 	NSUInteger rowCount = ALELibraryRootRowCount(listView);
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
+	ALELastLibraryRootGridFrameInWindow = [listView convertRect:CGRectMake(gridLeft, topY, gridWidth, maxY - topY) toView:nil];
+	ALEHasLastLibraryRootGridFrame = YES;
 
 	ALEExposeLibraryRootVisibleRange(listView, columnCount, rowCount);
 
@@ -758,6 +762,17 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 %end
 
 %hook SBHLibrarySearchController
+- (CGRect)_calculateSearchBarFrame:(BOOL)arg1 {
+	CGRect frame = %orig;
+	if (!arg1 && ALEHasLastLibraryRootGridFrame) {
+		CGRect targetFrame = [self.view convertRect:ALELastLibraryRootGridFrameInWindow fromView:nil];
+		if (CGRectGetWidth(targetFrame) > 0) {
+			frame.origin.x = floor(CGRectGetMinX(targetFrame));
+			frame.size.width = floor(CGRectGetWidth(targetFrame));
+		}
+	}
+	return frame;
+}
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
