@@ -54,6 +54,11 @@
 + (id)iconLocation;
 @end
 
+struct SBHIconGridSize {
+	unsigned short columns;
+	unsigned short rows;
+};
+
 @interface SBIconListGridLayoutConfiguration : NSObject
 @property (nonatomic) unsigned long long numberOfLandscapeColumns;
 @property (nonatomic) unsigned long long numberOfLandscapeRows;
@@ -66,13 +71,7 @@
 
 @interface SBIconListGridLayout : NSObject
 @property (nonatomic, copy, readonly) SBIconListGridLayoutConfiguration *layoutConfiguration;
-- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation;
 @end
-
-struct SBHIconGridSize {
-	unsigned short columns;
-	unsigned short rows;
-};
 
 @interface SBFolder : NSObject
 - (struct SBHIconGridSize)listGridSize;
@@ -85,7 +84,6 @@ struct SBHIconGridSize {
 @end
 
 static BOOL ALEConfiguringLibraryRootLayout = NO;
-static char ALEAppLibraryRootLayoutKey;
 
 static id ALEValueForKey(id object, NSString *key) {
 	if (!object || !key) {
@@ -142,36 +140,6 @@ static BOOL ALEIsLibraryCategoriesRootFolder(SBFolder *folder) {
 	return ALEObjectIsKindOfClassNamed(folder, @"SBHLibraryCategoriesRootFolder");
 }
 
-static BOOL ALEIsLibraryController(id controller) {
-	if (!controller) {
-		return NO;
-	}
-
-	if (ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryViewController") ||
-		ALEObjectIsKindOfClassNamed(controller, @"SBHLibrarySearchController") ||
-		ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryPodFolderController")) {
-		return YES;
-	}
-
-	id avocadoViewController = ALEValueForKey(controller, @"avocadoViewController");
-	if (avocadoViewController && avocadoViewController != controller) {
-		return ALEIsLibraryController(avocadoViewController);
-	}
-
-	id contentViewController = ALEValueForKey(controller, @"contentViewController");
-	if (contentViewController && contentViewController != controller) {
-		return ALEIsLibraryController(contentViewController);
-	}
-
-	return NO;
-}
-
-static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
-	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
-	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
-	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
-}
-
 static CGSize ALECurrentInterfaceSize(void) {
 	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
 	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
@@ -204,29 +172,39 @@ static CGSize ALELayoutInterfaceSize(void) {
 }
 
 static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
-	CGFloat targetWidth = floor(interfaceWidth * (ALEIsLandscapeScreen() ? 0.66 : 0.72));
-	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 720.0;
-	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 940.0;
-	CGFloat contentWidth = MIN(MAX(targetWidth, minimumWidth), MIN(interfaceWidth, maximumWidth));
-	return floor(contentWidth / 8.0) * 8.0;
+	CGFloat width = interfaceWidth * (ALEIsLandscapeScreen() ? 0.66 : 0.64);
+	CGFloat minimumWidth = ALEIsLandscapeScreen() ? 820.0 : 600.0;
+	CGFloat maximumWidth = ALEIsLandscapeScreen() ? 1040.0 : 760.0;
+	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
 static CGFloat ALELibraryRootPodWidth(void) {
 	CGSize screenSize = ALELayoutInterfaceSize();
 	CGFloat contentWidth = ALELibraryRootContentWidth(screenSize.width);
-	CGFloat columnGap = ALEIsLandscapeScreen() ? 48.0 : 28.0;
-	return floor((contentWidth - (columnGap * 3.0)) / 4.0);
+	CGFloat podGap = ALEIsLandscapeScreen() ? 48.0 : 28.0;
+	return floor((contentWidth - (podGap * 3.0)) / 4.0);
+}
+
+static unsigned long long ALELibraryRootPodColumns(void) {
+	return 4;
 }
 
 static struct SBHIconGridSize ALELibraryRootGridSize(struct SBHIconGridSize originalGridSize) {
 	struct SBHIconGridSize gridSize = originalGridSize;
-	gridSize.columns = MAX(gridSize.columns, (unsigned short)8);
-	gridSize.rows = MAX(gridSize.rows, (unsigned short)(ALEIsLandscapeScreen() ? 8 : 10));
+	unsigned long long podColumns = ALELibraryRootPodColumns();
+	unsigned long long podRows = ALEIsLandscapeScreen() ? 4 : 5;
+
+	gridSize.columns = MAX(gridSize.columns, (unsigned short)(podColumns * 2));
+	gridSize.rows = MAX(gridSize.rows, (unsigned short)(podRows * 2));
 	return gridSize;
 }
 
-static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *configuration) {
+static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *configuration, BOOL rootLayout) {
 	if (!configuration) {
+		return;
+	}
+
+	if (!rootLayout) {
 		return;
 	}
 
@@ -234,7 +212,8 @@ static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *co
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
 	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGFloat horizontalInset = 0.0;
+	CGSize spacingSize = CGSizeMake(rootContentWidth, interfaceHeight);
+	CGFloat horizontalInset = MAX((CGFloat)0.0, (interfaceWidth - rootContentWidth) / 2.0);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
 		configuration.numberOfLandscapeColumns = 8;
@@ -249,7 +228,7 @@ static void ALEConfigureAppLibraryRootGrid(SBIconListGridLayoutConfiguration *co
 		configuration.numberOfPortraitRows = 10;
 	}
 	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
-		configuration.listSizeForIconSpacingCalculation = CGSizeMake(rootContentWidth, interfaceHeight);
+		configuration.listSizeForIconSpacingCalculation = spacingSize;
 	}
 	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
@@ -270,9 +249,7 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 		return;
 	}
 
-	SBIconListGridLayoutConfiguration *configuration = [layout layoutConfiguration];
-	ALEConfigureAppLibraryRootGrid(configuration);
-	objc_setAssociatedObject(layout, &ALEAppLibraryRootLayoutKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	ALEConfigureAppLibraryGrid([layout layoutConfiguration], YES);
 }
 
 %hook SBIconController
@@ -306,9 +283,7 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 %hook SBHDefaultIconListLayoutProvider
 - (void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
-	if (ALEConfiguringLibraryRootLayout) {
-		ALEConfigureAppLibraryRootGrid(configuration);
-	}
+	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
 }
 
 - (id)makeLayoutForIconLocation:(id)iconLocation {
@@ -316,7 +291,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
 	id layout = %orig;
 	ALEConfiguringLibraryRootLayout = previousRootLayout;
-
 	if (ALEIsLibraryRootIconLocation(iconLocation)) {
 		ALEConfigureLayoutForLibraryRoot(layout);
 	}
@@ -328,22 +302,10 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	ALEConfiguringLibraryRootLayout = ALEIsLibraryRootIconLocation(iconLocation);
 	id layout = %orig;
 	ALEConfiguringLibraryRootLayout = previousRootLayout;
-
 	if (ALEIsLibraryRootIconLocation(iconLocation)) {
 		ALEConfigureLayoutForLibraryRoot(layout);
 	}
 	return layout;
-}
-%end
-
-%hook SBIconListGridLayout
-- (unsigned long long)numberOfColumnsForOrientation:(long long)orientation {
-	unsigned long long originalColumns = %orig;
-	if ([objc_getAssociatedObject(self, &ALEAppLibraryRootLayoutKey) boolValue]) {
-		return MAX(originalColumns, (unsigned long long)8);
-	}
-
-	return originalColumns;
 }
 %end
 
@@ -353,7 +315,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	if (ALEIsLibraryCategoriesRootFolder(self)) {
 		return ALELibraryRootGridSize(gridSize);
 	}
-
 	return gridSize;
 }
 %end
@@ -364,7 +325,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		return ALELibraryRootGridSize(gridSize);
 	}
-
 	return gridSize;
 }
 
@@ -372,68 +332,15 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	if (ALEIsLibraryCategoriesRootFolder(self.folder)) {
 		return %orig(ALELibraryRootGridSize(gridSize), options);
 	}
-
 	return %orig;
 }
 %end
 
 %hook SBHomeScreenOverlayViewController
--(CGFloat)contentWidth {
-	if (ALEOverlayShowsAppLibrary(self)) {
-		return ALELayoutInterfaceSize().width;
-	}
-	return %orig;
-}
-
--(CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
-	if (ALEOverlayShowsAppLibrary(self)) {
-		return containerWidth > 0.0 ? containerWidth : ALELayoutInterfaceSize().width;
-	}
-	return %orig;
-}
-
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
 	[[self rightSidebarViewController].view setAlpha:origValue];
 	return origValue;
-}
-%end
-
-%hook SBHLibrarySearchController
-- (void)viewDidAppear:(bool)arg1 {
-	%orig;
-	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
-	UIView *containerView = [self valueForKey:@"_containerView"];
-	UIView *contentContainerView = [self valueForKey:@"_contentContainerView"];
-	UIView *searchResultsContainerView = [self valueForKey:@"_searchResultsContainerView"];
-
-	CGRect selfFrame = self.view.frame;
-	[containerView setFrame:selfFrame];
-	[contentContainerView setFrame:selfFrame];
-	[searchResultsContainerView setFrame:selfFrame];
-
-	UIEdgeInsets searchTextFieldHorizontalEdgeInsets = [searchBar searchTextFieldHorizontalEdgeInsets];
-
-	searchTextFieldHorizontalEdgeInsets.left = 23;
-	searchTextFieldHorizontalEdgeInsets.right = 23;
-
-	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
-}
-- (void)_layoutSearchViews {
-	%orig;
-	MTMaterialView *searchBackdropView = [self valueForKey:@"_searchBackdropView"];
-
-	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
-	CGFloat height = [[UIScreen mainScreen] bounds].size.height;
-
-	CGRect fullScreenFrame = CGRectMake(
-		-100,
-		-100,
-		width + 200,
-		height + 200
-	);
-	[searchBackdropView setBounds:fullScreenFrame];
-	[searchBackdropView setFrame:fullScreenFrame];
 }
 %end
 
