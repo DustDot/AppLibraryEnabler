@@ -48,7 +48,6 @@
 @end
 @interface SBHLibraryPodFolderController : SBFolderController
 @property (nonatomic,readonly) UIView * containerView;
-@property (nonatomic,readonly) UIView * currentIconListView;
 @end
 
 struct SBHIconGridSize {
@@ -214,42 +213,6 @@ static struct SBHIconGridSizeClassSizes ALELibraryRootGridSizeClassSizes(struct 
 	return classSizes;
 }
 
-static void ALELayoutLibraryRootIconListView(SBHLibraryPodFolderController *controller) {
-	UIView *iconListView = nil;
-	if ([controller respondsToSelector:@selector(currentIconListView)]) {
-		iconListView = [controller currentIconListView];
-	}
-	if (!iconListView) {
-		iconListView = ALEValueForKey(controller, @"currentIconListView");
-	}
-	if (![iconListView isKindOfClass:[UIView class]]) {
-		return;
-	}
-
-	UIView *containerView = nil;
-	if ([controller respondsToSelector:@selector(containerView)]) {
-		containerView = [controller containerView];
-	}
-	if (!containerView) {
-		containerView = iconListView.superview;
-	}
-
-	CGFloat containerWidth = containerView.bounds.size.width;
-	if (containerWidth <= 0) {
-		containerWidth = ALEInterfaceSize().width;
-	}
-
-	CGFloat targetWidth = ALELibraryContentWidth();
-	if (targetWidth <= 0 || containerWidth <= 0) {
-		return;
-	}
-
-	CGRect frame = iconListView.frame;
-	frame.origin.x = floor((containerWidth - targetWidth) / 2.0);
-	frame.size.width = targetWidth;
-	[iconListView setFrame:frame];
-}
-
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -394,17 +357,11 @@ static void ALELayoutLibraryRootIconListView(SBHLibraryPodFolderController *cont
 %end
 
 %hook SBHLibraryPodFolderController
-- (void)viewDidLayoutSubviews {
-	%orig;
-	ALELayoutLibraryRootIconListView(self);
-}
-
 - (void)viewDidAppear:(bool)arg1 {
 	%orig;
 	UIView *containerView = [self containerView];
 	CGRect containerFrame = containerView.frame;
 	[self.view setFrame:containerFrame];
-	ALELayoutLibraryRootIconListView(self);
 }
 %end
 
