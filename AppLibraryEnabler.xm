@@ -62,6 +62,49 @@ static id ALEValueForKey(id object, NSString *key) {
 	}
 }
 
+static BOOL ALEObjectIsKindOfClassNamed(id object, NSString *className) {
+	if (!object || !className) {
+		return NO;
+	}
+
+	Class cls = NSClassFromString(className);
+	if (cls) {
+		return [object isKindOfClass:cls];
+	}
+
+	for (Class currentClass = object_getClass(object); currentClass; currentClass = class_getSuperclass(currentClass)) {
+		if ([NSStringFromClass(currentClass) isEqualToString:className]) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
+static BOOL ALEIsLibraryController(id controller) {
+	if (!controller) {
+		return NO;
+	}
+
+	if (ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryViewController") ||
+		ALEObjectIsKindOfClassNamed(controller, @"SBHLibrarySearchController") ||
+		ALEObjectIsKindOfClassNamed(controller, @"SBHLibraryPodFolderController")) {
+		return YES;
+	}
+
+	id childController = ALEValueForKey(controller, @"contentViewController");
+	if (childController && childController != controller && ALEIsLibraryController(childController)) {
+		return YES;
+	}
+
+	childController = ALEValueForKey(controller, @"avocadoViewController");
+	if (childController && childController != controller && ALEIsLibraryController(childController)) {
+		return YES;
+	}
+
+	return NO;
+}
+
 static CGSize ALEInterfaceSize(void) {
 	UIWindow *keyWindow = ALEValueForKey([UIApplication sharedApplication], @"keyWindow");
 	if ([keyWindow isKindOfClass:[UIWindow class]] && !CGSizeEqualToSize(keyWindow.bounds.size, CGSizeZero)) {
@@ -74,6 +117,28 @@ static CGSize ALEInterfaceSize(void) {
 static BOOL ALEIsLandscape(void) {
 	CGSize size = ALEInterfaceSize();
 	return size.width > size.height;
+}
+
+static CGRect ALELibraryFullScreenFrame(void) {
+	CGSize size = ALEInterfaceSize();
+	return CGRectMake(0.0, 0.0, size.width, size.height);
+}
+
+static BOOL ALEOverlayShowsAppLibrary(SBHomeScreenOverlayViewController *overlayController) {
+	id rightSidebarViewController = ALEValueForKey(overlayController, @"rightSidebarViewController");
+	id contentViewController = ALEValueForKey(overlayController, @"contentViewController");
+	return ALEIsLibraryController(rightSidebarViewController) || ALEIsLibraryController(contentViewController);
+}
+
+static void ALEExpandLibraryControllerView(UIViewController *controller) {
+	if (!ALEIsLibraryController(controller) || ![controller.view isKindOfClass:[UIView class]]) {
+		return;
+	}
+
+	CGRect fullScreenFrame = ALELibraryFullScreenFrame();
+	controller.view.frame = fullScreenFrame;
+	controller.view.bounds = fullScreenFrame;
+	controller.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 }
 
 static CGFloat ALELibraryPodWidth(void) {
@@ -133,9 +198,34 @@ static CGRect ALELibrarySearchBarFrame(CGRect frame) {
 %end
 
 %hook SBHomeScreenOverlayViewController
+-(CGFloat)contentWidth {
+	if (ALEOverlayShowsAppLibrary(self)) {
+		return ALEInterfaceSize().width;
+	}
+	return %orig;
+}
+
+-(CGFloat)contentWidthWithContainerWidth:(CGFloat)containerWidth {
+	if (ALEOverlayShowsAppLibrary(self)) {
+		return containerWidth > 0.0 ? containerWidth : ALEInterfaceSize().width;
+	}
+	return %orig;
+}
+
+-(void)viewDidLayoutSubviews {
+	%orig;
+	if (ALEOverlayShowsAppLibrary(self)) {
+		ALEExpandLibraryControllerView((UIViewController *)ALEValueForKey(self, @"rightSidebarViewController"));
+	}
+}
+
 -(CGFloat)presentationProgress {
 	CGFloat origValue = %orig;
-	[[self rightSidebarViewController].view setAlpha:origValue];
+	UIViewController *rightSidebarViewController = [self rightSidebarViewController];
+	if (ALEOverlayShowsAppLibrary(self)) {
+		ALEExpandLibraryControllerView(rightSidebarViewController);
+	}
+	[rightSidebarViewController.view setAlpha:origValue];
 	return origValue;
 }
 %end
