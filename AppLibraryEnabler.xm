@@ -175,9 +175,9 @@ static CGSize ALELayoutInterfaceSize(void) {
 
 static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	BOOL landscape = ALEIsLandscapeScreen();
-	CGFloat width = interfaceWidth * (landscape ? 0.72 : 0.86);
-	CGFloat minimumWidth = landscape ? 1040.0 : 960.0;
-	CGFloat maximumWidth = landscape ? 1320.0 : 1180.0;
+	CGFloat width = interfaceWidth * (landscape ? 0.66 : 0.72);
+	CGFloat minimumWidth = landscape ? 820.0 : 720.0;
+	CGFloat maximumWidth = landscape ? 1040.0 : 940.0;
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
