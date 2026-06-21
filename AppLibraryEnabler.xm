@@ -50,6 +50,123 @@
 @property (nonatomic,readonly) UIView * containerView;
 @end
 
+@interface SBHAppLibraryVisualConfiguration : NSObject
+@property (nonatomic) CGSize expandedCategoryPodIconSpacing;
+@property (nonatomic) CGSize landscapeCategoryPodIconSpacing;
+@property (nonatomic) CGSize portraitCategoryPodIconSpacing;
+@property (nonatomic) double searchContinuousCornerRadius;
+@property (nonatomic) bool usesInsetPlatterSearchAppearance;
+@end
+
+@interface SBIconListGridLayoutConfiguration : NSObject
+@property (nonatomic, copy) SBHAppLibraryVisualConfiguration *appLibraryVisualConfiguration;
+@property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
+@property (nonatomic) CGSize listSizeForIconSpacingCalculation;
+@property (nonatomic) unsigned long long numberOfLandscapeColumns;
+@property (nonatomic) unsigned long long numberOfLandscapeRows;
+@property (nonatomic) unsigned long long numberOfPortraitColumns;
+@property (nonatomic) unsigned long long numberOfPortraitRows;
+@property (nonatomic) UIEdgeInsets portraitLayoutInsets;
+@end
+
+static BOOL ALEObjectIsKindOfClassNamed(id object, const char *className) {
+	if (!object || !className) {
+		return NO;
+	}
+
+	Class cls = objc_getClass(className);
+	if (cls) {
+		return [object isKindOfClass:cls];
+	}
+
+	NSString *targetClassName = [NSString stringWithUTF8String:className];
+	for (Class currentClass = object_getClass(object); currentClass; currentClass = class_getSuperclass(currentClass)) {
+		if ([NSStringFromClass(currentClass) isEqualToString:targetClassName]) {
+			return YES;
+		}
+	}
+
+	return NO;
+}
+
+static BOOL ALEGridConfigurationHasAppLibraryVisualConfiguration(SBIconListGridLayoutConfiguration *configuration) {
+	if (![configuration respondsToSelector:@selector(appLibraryVisualConfiguration)]) {
+		return NO;
+	}
+
+	id visualConfiguration = configuration.appLibraryVisualConfiguration;
+	return ALEObjectIsKindOfClassNamed(visualConfiguration, "SBHAppLibraryVisualConfiguration");
+}
+
+static BOOL ALEIsLandscapeInterface(void) {
+	CGSize size = [UIScreen mainScreen].bounds.size;
+	return size.width > size.height;
+}
+
+static CGSize ALEAppLibraryContentSizeForSpacing(void) {
+	CGSize size = [UIScreen mainScreen].bounds.size;
+	CGFloat width = MAX(size.width, size.height);
+	CGFloat height = MIN(size.width, size.height);
+	if (!ALEIsLandscapeInterface()) {
+		width = MIN(size.width, size.height);
+		height = MAX(size.width, size.height);
+	}
+
+	return CGSizeMake(floor(width * (ALEIsLandscapeInterface() ? 0.66 : 0.64)), floor(height * 0.58));
+}
+
+static void ALEConfigureAppLibraryVisualConfiguration(SBHAppLibraryVisualConfiguration *configuration) {
+	if (!configuration) {
+		return;
+	}
+
+	if ([configuration respondsToSelector:@selector(setLandscapeCategoryPodIconSpacing:)]) {
+		configuration.landscapeCategoryPodIconSpacing = CGSizeMake(33.0, 37.0);
+	}
+	if ([configuration respondsToSelector:@selector(setPortraitCategoryPodIconSpacing:)]) {
+		configuration.portraitCategoryPodIconSpacing = CGSizeMake(27.0, 31.0);
+	}
+	if ([configuration respondsToSelector:@selector(setExpandedCategoryPodIconSpacing:)]) {
+		configuration.expandedCategoryPodIconSpacing = CGSizeMake(30.0, 30.0);
+	}
+	if ([configuration respondsToSelector:@selector(setSearchContinuousCornerRadius:)]) {
+		configuration.searchContinuousCornerRadius = 18.0;
+	}
+	if ([configuration respondsToSelector:@selector(setUsesInsetPlatterSearchAppearance:)]) {
+		configuration.usesInsetPlatterSearchAppearance = YES;
+	}
+}
+
+static void ALEConfigureAppLibraryGridConfiguration(SBIconListGridLayoutConfiguration *configuration) {
+	if (!ALEGridConfigurationHasAppLibraryVisualConfiguration(configuration)) {
+		return;
+	}
+
+	ALEConfigureAppLibraryVisualConfiguration(configuration.appLibraryVisualConfiguration);
+
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
+		configuration.numberOfLandscapeColumns = 4;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeRows:)]) {
+		configuration.numberOfLandscapeRows = 3;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitColumns:)]) {
+		configuration.numberOfPortraitColumns = 4;
+	}
+	if ([configuration respondsToSelector:@selector(setNumberOfPortraitRows:)]) {
+		configuration.numberOfPortraitRows = 3;
+	}
+	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
+		configuration.landscapeLayoutInsets = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0);
+	}
+	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
+		configuration.portraitLayoutInsets = UIEdgeInsetsMake(0.0, 0.0, 0.0, 0.0);
+	}
+	if ([configuration respondsToSelector:@selector(setListSizeForIconSpacingCalculation:)]) {
+		configuration.listSizeForIconSpacingCalculation = ALEAppLibraryContentSizeForSpacing();
+	}
+}
+
 %hook SBIconController
 - (bool)isAppLibraryAllowed {
 	return YES;
@@ -163,6 +280,100 @@
 }
 %end
 
+%group iPadOS15AppLibraryConfiguration
+
+%hook SBHAppLibraryVisualConfiguration
+- (id)init {
+	id result = %orig;
+	ALEConfigureAppLibraryVisualConfiguration(result);
+	return result;
+}
+
+- (CGSize)landscapeCategoryPodIconSpacing {
+	return CGSizeMake(33.0, 37.0);
+}
+
+- (CGSize)portraitCategoryPodIconSpacing {
+	return CGSizeMake(27.0, 31.0);
+}
+
+- (CGSize)expandedCategoryPodIconSpacing {
+	return CGSizeMake(30.0, 30.0);
+}
+
+- (double)searchContinuousCornerRadius {
+	return 18.0;
+}
+
+- (bool)usesInsetPlatterSearchAppearance {
+	return YES;
+}
+%end
+
+%hook SBIconListGridLayoutConfiguration
+- (void)setAppLibraryVisualConfiguration:(SBHAppLibraryVisualConfiguration *)appLibraryVisualConfiguration {
+	%orig;
+	ALEConfigureAppLibraryGridConfiguration(self);
+}
+
+- (SBHAppLibraryVisualConfiguration *)appLibraryVisualConfiguration {
+	SBHAppLibraryVisualConfiguration *configuration = %orig;
+	ALEConfigureAppLibraryVisualConfiguration(configuration);
+	return configuration;
+}
+
+- (unsigned long long)numberOfLandscapeColumns {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return 4;
+	}
+	return %orig;
+}
+
+- (unsigned long long)numberOfLandscapeRows {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return 3;
+	}
+	return %orig;
+}
+
+- (unsigned long long)numberOfPortraitColumns {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return 4;
+	}
+	return %orig;
+}
+
+- (unsigned long long)numberOfPortraitRows {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return 3;
+	}
+	return %orig;
+}
+
+- (UIEdgeInsets)landscapeLayoutInsets {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return UIEdgeInsetsZero;
+	}
+	return %orig;
+}
+
+- (UIEdgeInsets)portraitLayoutInsets {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return UIEdgeInsetsZero;
+	}
+	return %orig;
+}
+
+- (CGSize)listSizeForIconSpacingCalculation {
+	if (ALEGridConfigurationHasAppLibraryVisualConfiguration(self)) {
+		return ALEAppLibraryContentSizeForSpacing();
+	}
+	return %orig;
+}
+%end
+
+%end
+
 extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature);
 %hookf(bool, _os_feature_enabled_impl, const char *domain, const char *feature) {
 	if (strcmp(domain, "SpringBoard") == 0 && strcmp(feature, "Dewey") == 0) {
@@ -173,4 +384,7 @@ extern "C" bool _os_feature_enabled_impl(const char *domain, const char *feature
 
 %ctor {
 	%init;
+	if (objc_getClass("SBHAppLibraryVisualConfiguration") && objc_getClass("SBIconListGridLayoutConfiguration")) {
+		%init(iPadOS15AppLibraryConfiguration);
+	}
 }
