@@ -40,10 +40,6 @@
 @interface MTMaterialView : UIView
 @end
 
-@interface SBHAppLibraryVisualConfiguration : NSObject
-@property (assign,nonatomic) UIEdgeInsets appSearchTextFieldLayoutInsets;
-@end
-
 @interface SBHLibrarySearchController : UIViewController
 @end
 
@@ -80,7 +76,6 @@ struct SBHIconGridSizeClassSizes {
 @property (nonatomic) UIEdgeInsets landscapeLayoutInsets;
 @property (nonatomic) UIEdgeInsets portraitLayoutInsets;
 @property (nonatomic) struct SBHIconGridSizeClassSizes iconGridSizeClassSizes;
-@property (nonatomic, copy) SBHAppLibraryVisualConfiguration *appLibraryVisualConfiguration;
 @end
 
 @interface SBIconListGridLayout : NSObject
@@ -296,52 +291,11 @@ static CGFloat ALELibraryRootContentWidth(CGFloat interfaceWidth) {
 	return MIN(MAX(width, minimumWidth), MIN(interfaceWidth, maximumWidth));
 }
 
-static UIEdgeInsets ALELibraryRootContentInsetsForWidth(CGFloat interfaceWidth) {
-	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	CGFloat horizontalInset = MAX((CGFloat)0, floor((interfaceWidth - rootContentWidth) / 2.0));
-	return UIEdgeInsetsMake(0, horizontalInset, 0, horizontalInset);
-}
-
 static CGFloat ALELibraryRootColumnGap(CGFloat podWidth) {
 	CGFloat ratioGap = floor(podWidth * (ALEIsLandscapeScreen() ? 0.23 : 0.18));
 	CGFloat minimumGap = ALEIsLandscapeScreen() ? 32.0 : 24.0;
 	CGFloat maximumGap = ALEIsLandscapeScreen() ? 38.0 : 32.0;
 	return MIN(MAX(ratioGap, minimumGap), maximumGap);
-}
-
-static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
-	CGFloat ratioGap = floor(podHeight * (ALEIsLandscapeScreen() ? 0.28 : 0.26));
-	CGFloat minimumGap = ALEIsLandscapeScreen() ? 42.0 : 42.0;
-	CGFloat maximumGap = ALEIsLandscapeScreen() ? 52.0 : 52.0;
-	return MIN(MAX(ratioGap, minimumGap), maximumGap);
-}
-
-static CGFloat ALELibraryRootTopYForView(UIView *view, CGFloat podHeight, CGFloat rowStep, NSUInteger rowCount) {
-	UIView *coordinateView = view.window ?: view.superview;
-	CGRect bounds = [coordinateView isKindOfClass:[UIView class]] ? coordinateView.bounds : CGRectZero;
-	CGFloat height = CGRectGetHeight(bounds);
-	if (height <= 0 && view) {
-		bounds = view.bounds;
-		height = CGRectGetHeight(bounds);
-	}
-	if (height <= 0) {
-		height = ALECurrentInterfaceSize().height;
-		bounds = CGRectMake(0, 0, ALECurrentInterfaceSize().width, height);
-	}
-
-	CGFloat gridHeight = podHeight + (rowStep * MAX((NSInteger)rowCount - 1, 0));
-	CGFloat availableTop = floor(height * (ALEIsLandscapeScreen() ? 0.24 : 0.16));
-	CGFloat availableBottom = floor(height * (ALEIsLandscapeScreen() ? 0.93 : 0.94));
-	CGFloat availableHeight = MAX((CGFloat)0, availableBottom - availableTop);
-	CGFloat verticalBias = ALEIsLandscapeScreen() ? 0.42 : 0.38;
-	CGFloat targetY = gridHeight >= availableHeight ? availableTop : floor(availableTop + ((availableHeight - gridHeight) * verticalBias));
-
-	if ([coordinateView isKindOfClass:[UIView class]] && view) {
-		CGPoint targetPoint = CGPointMake(CGRectGetMidX(bounds), targetY);
-		return floor([view convertPoint:targetPoint fromView:coordinateView].y);
-	}
-
-	return targetY;
 }
 
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
@@ -500,6 +454,8 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	}
 
 	NSUInteger columnCount = ALELibraryRootPodColumnCount();
+	CGFloat topY = CGFLOAT_MAX;
+	CGFloat secondY = CGFLOAT_MAX;
 	CGFloat podWidth = 0;
 	CGFloat podHeight = 0;
 
@@ -516,9 +472,17 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 
 		podWidth = MAX(podWidth, CGRectGetWidth(frame));
 		podHeight = MAX(podHeight, CGRectGetHeight(frame));
+
+		CGFloat y = CGRectGetMinY(frame);
+		if (y < topY - 1.0) {
+			secondY = topY;
+			topY = y;
+		} else if (y > topY + 8.0 && y < secondY - 1.0) {
+			secondY = y;
+		}
 	}
 
-	if (podWidth <= 0 || podHeight <= 0 || columnCount == 0) {
+	if (podWidth <= 0 || podHeight <= 0 || topY == CGFLOAT_MAX || columnCount == 0) {
 		return 0;
 	}
 
@@ -526,11 +490,14 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	CGFloat gridWidth = (podWidth * columnCount) + (columnGap * (columnCount - 1));
 	gridWidth = MIN(gridWidth, listWidth);
 	CGFloat gridLeft = floor((listWidth - gridWidth) / 2.0);
+	columnGap = columnCount > 1 ? (gridWidth - (podWidth * columnCount)) / (CGFloat)(columnCount - 1) : 0;
 
-	CGFloat rowStep = podHeight + ALELibraryRootRowGap(podHeight);
+	CGFloat rowStep = secondY != CGFLOAT_MAX ? secondY - topY : podHeight + 44.0;
+	if (rowStep < podHeight + 28.0) {
+		rowStep = podHeight + 36.0;
+	}
 
 	NSUInteger rowCount = ALELibraryRootRowCount(listView);
-	CGFloat topY = ALELibraryRootTopYForView(listView, podHeight, rowStep, rowCount);
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 
 	ALEExposeLibraryRootVisibleRange(listView, columnCount, rowCount);
@@ -566,7 +533,6 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	CGFloat interfaceWidth = screenSize.width;
 	CGFloat interfaceHeight = screenSize.height;
 	CGFloat rootContentWidth = ALELibraryRootContentWidth(interfaceWidth);
-	UIEdgeInsets rootContentInsets = ALELibraryRootContentInsetsForWidth(interfaceWidth);
 	CGSize spacingSize = CGSizeMake(rootLayout ? rootContentWidth : interfaceWidth, interfaceHeight);
 
 	if ([configuration respondsToSelector:@selector(setNumberOfLandscapeColumns:)]) {
@@ -586,21 +552,15 @@ static void ALEConfigureAppLibraryGrid(SBIconListGridLayoutConfiguration *config
 	}
 	if ([configuration respondsToSelector:@selector(setLandscapeLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.landscapeLayoutInsets;
-		insets.left = rootLayout ? rootContentInsets.left : MAX((CGFloat)96.0, interfaceWidth * 0.11);
+		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)96.0, interfaceWidth * 0.11);
 		insets.right = insets.left;
 		configuration.landscapeLayoutInsets = insets;
 	}
 	if ([configuration respondsToSelector:@selector(setPortraitLayoutInsets:)]) {
 		UIEdgeInsets insets = configuration.portraitLayoutInsets;
-		insets.left = rootLayout ? rootContentInsets.left : MAX((CGFloat)72.0, interfaceWidth * 0.105);
+		insets.left = rootLayout ? MAX((CGFloat)0, (interfaceWidth - rootContentWidth) / 2.0) : MAX((CGFloat)72.0, interfaceWidth * 0.105);
 		insets.right = insets.left;
 		configuration.portraitLayoutInsets = insets;
-	}
-	if (rootLayout && [configuration respondsToSelector:@selector(appLibraryVisualConfiguration)]) {
-		SBHAppLibraryVisualConfiguration *visualConfiguration = configuration.appLibraryVisualConfiguration;
-		if ([visualConfiguration respondsToSelector:@selector(setAppSearchTextFieldLayoutInsets:)]) {
-			visualConfiguration.appSearchTextFieldLayoutInsets = rootContentInsets;
-		}
 	}
 }
 
@@ -670,16 +630,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 %end
 
 %hook SBHDefaultIconListLayoutProvider
--(UIEdgeInsets)homeScreenSearchOverlayInsetsForScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions forAppLibrary:(BOOL)forAppLibrary {
-	UIEdgeInsets insets = %orig;
-	if (forAppLibrary) {
-		CGFloat interfaceWidth = ALECurrentInterfaceSize().width;
-		UIEdgeInsets rootContentInsets = ALELibraryRootContentInsetsForWidth(interfaceWidth);
-		insets.left = rootContentInsets.left;
-		insets.right = rootContentInsets.right;
-	}
-	return insets;
-}
 -(void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
 	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
