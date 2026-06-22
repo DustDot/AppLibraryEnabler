@@ -319,13 +319,13 @@ static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
 static UIScrollView *ALEEnclosingScrollView(UIView *view);
 
 static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
-	CGRect visibleBounds = CGRectMake(0, 0, CGRectGetWidth(view.bounds), CGRectGetHeight(view.bounds));
+	CGRect visibleBounds = view.bounds;
 	UIScrollView *scrollView = ALEEnclosingScrollView(view);
 	if ([scrollView isKindOfClass:[UIScrollView class]] && CGRectGetWidth(scrollView.bounds) > 0 && CGRectGetHeight(scrollView.bounds) > 0) {
-		visibleBounds.size = scrollView.bounds.size;
+		visibleBounds = [view convertRect:scrollView.bounds fromView:scrollView];
 	}
 	if (CGRectGetWidth(visibleBounds) <= 0 || CGRectGetHeight(visibleBounds) <= 0) {
-		visibleBounds = CGRectMake(0, 0, CGRectGetWidth(view.superview.bounds), CGRectGetHeight(view.superview.bounds));
+		visibleBounds = view.superview.bounds;
 	}
 	if (CGRectGetWidth(visibleBounds) <= 0 || CGRectGetHeight(visibleBounds) <= 0) {
 		CGSize interfaceSize = ALECurrentInterfaceSize();
@@ -339,31 +339,14 @@ static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
 	CGFloat height = CGRectGetHeight(visibleBounds);
 	CGFloat targetX = floor((width - gridSize.width) / 2.0);
 	CGFloat targetY = floor((height - gridSize.height) / 2.0);
-	CGFloat topBoundary = floor(height * (ALEIsLandscapeScreen() ? 0.145 : 0.15));
-	CGFloat bottomBoundary = height - floor(height * (ALEIsLandscapeScreen() ? 0.055 : 0.04));
+	CGFloat topBoundary = floor(height * (ALEIsLandscapeScreen() ? 0.19 : 0.15));
+	CGFloat bottomBoundary = height - floor(height * (ALEIsLandscapeScreen() ? 0.035 : 0.04));
 	targetY = MAX(topBoundary, targetY);
 	if (targetY + gridSize.height > bottomBoundary) {
 		targetY = MAX(topBoundary, floor(bottomBoundary - gridSize.height));
 	}
 
-	return CGRectMake(targetX, targetY, gridSize.width, gridSize.height);
-}
-
-static void ALEApplyLibraryRootFrameToSearchBar(SBHSearchBar *searchBar) {
-	if (![searchBar isKindOfClass:NSClassFromString(@"SBHSearchBar")]) {
-		return;
-	}
-
-	CGFloat superviewWidth = CGRectGetWidth(searchBar.superview.bounds);
-	if (superviewWidth <= 0) {
-		superviewWidth = ALECurrentInterfaceSize().width;
-	}
-
-	UIEdgeInsets rootInsets = ALELibraryRootContentInsetsForWidth(superviewWidth);
-	CGRect frame = searchBar.frame;
-	frame.origin.x = rootInsets.left;
-	frame.size.width = MAX((CGFloat)0, superviewWidth - rootInsets.left - rootInsets.right);
-	searchBar.frame = frame;
+	return CGRectMake(targetX, CGRectGetMinY(visibleBounds) + targetY, gridSize.width, gridSize.height);
 }
 
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
@@ -841,13 +824,9 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 	searchTextFieldHorizontalEdgeInsets.right = 23;
 
 	[searchBar setSearchTextFieldHorizontalEdgeInsets:searchTextFieldHorizontalEdgeInsets];
-	ALEApplyLibraryRootFrameToSearchBar(searchBar);
 }
 - (void)_layoutSearchViews {
 	%orig;
-	SBHSearchBar *searchBar = [self valueForKey:@"_searchBar"];
-	ALEApplyLibraryRootFrameToSearchBar(searchBar);
-
 	MTMaterialView *searchBackdropView = [self valueForKey:@"_searchBackdropView"];
 
 	CGFloat width = [[UIScreen mainScreen] bounds].size.width;
