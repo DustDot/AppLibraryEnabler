@@ -316,10 +316,6 @@ static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
 	return MIN(MAX(ratioGap, minimumGap), maximumGap);
 }
 
-static CGFloat ALELibraryRootTopAdjustment(void) {
-	return ALEIsLandscapeScreen() ? 20.0 : 24.0;
-}
-
 static CGFloat ALELibraryRootTopYForView(UIView *view, CGFloat podHeight, CGFloat rowStep, NSUInteger rowCount) {
 	UIView *coordinateView = view.window ?: view.superview;
 	CGRect bounds = [coordinateView isKindOfClass:[UIView class]] ? coordinateView.bounds : CGRectZero;
@@ -337,7 +333,8 @@ static CGFloat ALELibraryRootTopYForView(UIView *view, CGFloat podHeight, CGFloa
 	CGFloat availableTop = floor(height * (ALEIsLandscapeScreen() ? 0.24 : 0.16));
 	CGFloat availableBottom = floor(height * (ALEIsLandscapeScreen() ? 0.93 : 0.94));
 	CGFloat availableHeight = MAX((CGFloat)0, availableBottom - availableTop);
-	CGFloat targetY = gridHeight >= availableHeight ? availableTop : floor(availableTop + ((availableHeight - gridHeight) / 2.0));
+	CGFloat verticalBias = ALEIsLandscapeScreen() ? 0.42 : 0.38;
+	CGFloat targetY = gridHeight >= availableHeight ? availableTop : floor(availableTop + ((availableHeight - gridHeight) * verticalBias));
 
 	if ([coordinateView isKindOfClass:[UIView class]] && view) {
 		CGPoint targetPoint = CGPointMake(CGRectGetMidX(bounds), targetY);
@@ -533,7 +530,7 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	CGFloat rowStep = podHeight + ALELibraryRootRowGap(podHeight);
 
 	NSUInteger rowCount = ALELibraryRootRowCount(listView);
-	CGFloat topY = ALELibraryRootTopYForView(listView, podHeight, rowStep, rowCount) + ALELibraryRootTopAdjustment();
+	CGFloat topY = ALELibraryRootTopYForView(listView, podHeight, rowStep, rowCount);
 	CGFloat maxY = topY + (rowStep * MAX((NSInteger)rowCount - 1, 0)) + podHeight;
 
 	ALEExposeLibraryRootVisibleRange(listView, columnCount, rowCount);
