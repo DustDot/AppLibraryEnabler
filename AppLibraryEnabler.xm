@@ -316,30 +316,10 @@ static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
 	return MIN(MAX(ratioGap, minimumGap), maximumGap);
 }
 
-static UIView *ALEFirstSubviewOfClassNamed(UIView *view, NSString *className) {
-	if (![view isKindOfClass:[UIView class]] || !className) {
-		return nil;
-	}
-
-	if (ALEObjectIsKindOfClassNamed(view, className)) {
-		return view;
-	}
-
-	for (UIView *subview in view.subviews) {
-		UIView *matchedView = ALEFirstSubviewOfClassNamed(subview, className);
-		if (matchedView) {
-			return matchedView;
-		}
-	}
-
-	return nil;
-}
-
 static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
-	UIView *coordinateView = view.window ?: view.superview;
-	CGRect bounds = [coordinateView isKindOfClass:[UIView class]] ? coordinateView.bounds : CGRectZero;
-	if ((CGRectGetWidth(bounds) <= 0 || CGRectGetHeight(bounds) <= 0) && view) {
-		bounds = view.bounds;
+	CGRect bounds = view.bounds;
+	if (CGRectGetWidth(bounds) <= 0 || CGRectGetHeight(bounds) <= 0) {
+		bounds = view.superview.bounds;
 	}
 	if (CGRectGetWidth(bounds) <= 0 || CGRectGetHeight(bounds) <= 0) {
 		CGSize interfaceSize = ALECurrentInterfaceSize();
@@ -351,24 +331,10 @@ static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
 	CGFloat targetX = floor((width - gridSize.width) / 2.0);
 	CGFloat targetY = floor((height - gridSize.height) / 2.0);
 	CGFloat topBoundary = floor(height * (ALEIsLandscapeScreen() ? 0.19 : 0.15));
-
-	UIView *searchBar = ALEFirstSubviewOfClassNamed(coordinateView, @"SBHSearchBar");
-	if ([searchBar isKindOfClass:[UIView class]] && !searchBar.hidden && searchBar.alpha > 0.01) {
-		CGRect searchFrame = [searchBar convertRect:searchBar.bounds toView:coordinateView];
-		if (CGRectGetHeight(searchFrame) > 0) {
-			topBoundary = MAX(topBoundary, CGRectGetMaxY(searchFrame) + floor(height * (ALEIsLandscapeScreen() ? 0.035 : 0.03)));
-		}
-	}
-
 	CGFloat bottomBoundary = height - floor(height * (ALEIsLandscapeScreen() ? 0.035 : 0.04));
 	targetY = MAX(topBoundary, targetY);
 	if (targetY + gridSize.height > bottomBoundary) {
 		targetY = MAX(topBoundary, floor(bottomBoundary - gridSize.height));
-	}
-
-	if ([coordinateView isKindOfClass:[UIView class]] && view) {
-		CGPoint origin = [view convertPoint:CGPointMake(targetX, targetY) fromView:coordinateView];
-		return CGRectMake(floor(origin.x), floor(origin.y), gridSize.width, gridSize.height);
 	}
 
 	return CGRectMake(targetX, targetY, gridSize.width, gridSize.height);
