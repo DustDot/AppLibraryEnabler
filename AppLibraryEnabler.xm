@@ -346,7 +346,7 @@ static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
 		targetY = MAX(topBoundary, floor(bottomBoundary - gridSize.height));
 	}
 
-	return CGRectMake(targetX, targetY, gridSize.width, gridSize.height);
+	return CGRectMake(targetX, CGRectGetMinY(visibleBounds) + targetY, gridSize.width, gridSize.height);
 }
 
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
@@ -682,15 +682,6 @@ static void ALEConfigureLayoutForLibraryRoot(id layout) {
 %end
 
 %hook SBHDefaultIconListLayoutProvider
--(UIEdgeInsets)homeScreenSearchOverlayInsetsForScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions forAppLibrary:(BOOL)forAppLibrary {
-	UIEdgeInsets insets = %orig;
-	if (forAppLibrary) {
-		UIEdgeInsets rootContentInsets = ALELibraryRootContentInsetsForWidth(ALECurrentInterfaceSize().width);
-		insets.left = rootContentInsets.left;
-		insets.right = rootContentInsets.right;
-	}
-	return insets;
-}
 -(void)configureAppLibraryConfiguration:(SBIconListGridLayoutConfiguration *)configuration forScreenType:(unsigned long long)screenType layoutOptions:(unsigned long long)layoutOptions {
 	%orig;
 	ALEConfigureAppLibraryGrid(configuration, ALEConfiguringLibraryRootLayout);
