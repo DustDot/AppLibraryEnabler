@@ -316,18 +316,27 @@ static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
 	return MIN(MAX(ratioGap, minimumGap), maximumGap);
 }
 
+static UIScrollView *ALEEnclosingScrollView(UIView *view);
+
 static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
-	CGRect bounds = view.bounds;
-	if (CGRectGetWidth(bounds) <= 0 || CGRectGetHeight(bounds) <= 0) {
-		bounds = view.superview.bounds;
+	CGRect visibleBounds = view.bounds;
+	UIScrollView *scrollView = ALEEnclosingScrollView(view);
+	if ([scrollView isKindOfClass:[UIScrollView class]] && CGRectGetWidth(scrollView.bounds) > 0 && CGRectGetHeight(scrollView.bounds) > 0) {
+		visibleBounds = [view convertRect:scrollView.bounds fromView:scrollView];
 	}
-	if (CGRectGetWidth(bounds) <= 0 || CGRectGetHeight(bounds) <= 0) {
+	if (CGRectGetWidth(visibleBounds) <= 0 || CGRectGetHeight(visibleBounds) <= 0) {
+		visibleBounds = view.superview.bounds;
+	}
+	if (CGRectGetWidth(visibleBounds) <= 0 || CGRectGetHeight(visibleBounds) <= 0) {
 		CGSize interfaceSize = ALECurrentInterfaceSize();
-		bounds = CGRectMake(0, 0, interfaceSize.width, interfaceSize.height);
+		visibleBounds = CGRectMake(0, 0, interfaceSize.width, interfaceSize.height);
 	}
 
-	CGFloat width = CGRectGetWidth(bounds);
-	CGFloat height = CGRectGetHeight(bounds);
+	CGFloat width = CGRectGetWidth(view.bounds);
+	if (width <= 0) {
+		width = CGRectGetWidth(visibleBounds);
+	}
+	CGFloat height = CGRectGetHeight(visibleBounds);
 	CGFloat targetX = floor((width - gridSize.width) / 2.0);
 	CGFloat targetY = floor((height - gridSize.height) / 2.0);
 	CGFloat topBoundary = floor(height * (ALEIsLandscapeScreen() ? 0.19 : 0.15));
@@ -337,7 +346,7 @@ static CGRect ALELibraryRootFrameForGridInView(UIView *view, CGSize gridSize) {
 		targetY = MAX(topBoundary, floor(bottomBoundary - gridSize.height));
 	}
 
-	return CGRectMake(targetX, targetY, gridSize.width, gridSize.height);
+	return CGRectMake(targetX, CGRectGetMinY(visibleBounds) + targetY, gridSize.width, gridSize.height);
 }
 
 static BOOL ALEIsLibraryRootListView(SBIconListView *listView) {
