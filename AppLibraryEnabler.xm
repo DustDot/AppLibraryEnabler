@@ -425,7 +425,8 @@ static void ALEUpdateLibraryRootScrollRange(SBIconListView *listView, CGFloat co
 
 		if (contentBottom > 0) {
 			CGFloat listMinY = ALEViewMinYInAncestor(listView, scrollView);
-			contentSize.height = MAX(contentSize.height, listMinY + contentBottom + 48.0);
+			CGFloat minimumHeight = CGRectGetHeight(scrollView.bounds) + scrollView.contentInset.top + scrollView.contentInset.bottom;
+			contentSize.height = MAX(minimumHeight, listMinY + contentBottom + 24.0);
 		}
 
 		scrollView.contentSize = contentSize;
