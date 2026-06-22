@@ -316,15 +316,6 @@ static CGFloat ALELibraryRootRowGap(CGFloat podHeight) {
 	return MIN(MAX(ratioGap, minimumGap), maximumGap);
 }
 
-static CGFloat ALEMedianValueFromNumbers(NSArray *numbers) {
-	if (![numbers isKindOfClass:[NSArray class]] || numbers.count == 0) {
-		return 0;
-	}
-
-	NSArray *sortedNumbers = [numbers sortedArrayUsingSelector:@selector(compare:)];
-	return [[sortedNumbers objectAtIndex:(sortedNumbers.count / 2)] doubleValue];
-}
-
 static CGFloat ALELibraryRootTopYForView(UIView *view, CGFloat podHeight, CGFloat rowStep, NSUInteger rowCount) {
 	UIView *coordinateView = view.window ?: view.superview;
 	CGRect bounds = [coordinateView isKindOfClass:[UIView class]] ? coordinateView.bounds : CGRectZero;
@@ -339,9 +330,11 @@ static CGFloat ALELibraryRootTopYForView(UIView *view, CGFloat podHeight, CGFloa
 	}
 
 	CGFloat gridHeight = podHeight + (rowStep * MAX((NSInteger)rowCount - 1, 0));
-	CGFloat topClearance = floor(height * (ALEIsLandscapeScreen() ? 0.18 : 0.14));
-	CGFloat centeredY = floor((height - gridHeight) / 2.0);
-	CGFloat targetY = MAX(topClearance, centeredY);
+	CGFloat availableTop = floor(height * (ALEIsLandscapeScreen() ? 0.24 : 0.16));
+	CGFloat availableBottom = floor(height * (ALEIsLandscapeScreen() ? 0.93 : 0.94));
+	CGFloat availableHeight = MAX((CGFloat)0, availableBottom - availableTop);
+	CGFloat verticalBias = ALEIsLandscapeScreen() ? 0.42 : 0.38;
+	CGFloat targetY = gridHeight >= availableHeight ? availableTop : floor(availableTop + ((availableHeight - gridHeight) * verticalBias));
 
 	if ([coordinateView isKindOfClass:[UIView class]] && view) {
 		CGPoint targetPoint = CGPointMake(CGRectGetMidX(bounds), targetY);
@@ -507,8 +500,8 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 	}
 
 	NSUInteger columnCount = ALELibraryRootPodColumnCount();
-	NSMutableArray *podWidths = [NSMutableArray array];
-	NSMutableArray *podHeights = [NSMutableArray array];
+	CGFloat podWidth = 0;
+	CGFloat podHeight = 0;
 
 	for (id icon in icons) {
 		UIView *iconView = [listView iconViewForIcon:icon];
@@ -521,12 +514,9 @@ static CGFloat ALELayoutLibraryRootListView(SBIconListView *listView) {
 			continue;
 		}
 
-		[podWidths addObject:[NSNumber numberWithDouble:CGRectGetWidth(frame)]];
-		[podHeights addObject:[NSNumber numberWithDouble:CGRectGetHeight(frame)]];
+		podWidth = MAX(podWidth, CGRectGetWidth(frame));
+		podHeight = MAX(podHeight, CGRectGetHeight(frame));
 	}
-
-	CGFloat podWidth = ALEMedianValueFromNumbers(podWidths);
-	CGFloat podHeight = ALEMedianValueFromNumbers(podHeights);
 
 	if (podWidth <= 0 || podHeight <= 0 || columnCount == 0) {
 		return 0;
